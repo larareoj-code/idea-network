@@ -1,0 +1,6 @@
+node_modules/
+dist/
+data/
+public/samples/
+*.local
+.DS_Store
