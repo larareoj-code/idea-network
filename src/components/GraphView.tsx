@@ -36,15 +36,27 @@ interface Props {
 
 const linkEnd = (v: string | RuntimeNode): string => (typeof v === "object" ? v.id : v);
 
+// Above this node count, zoom-based labels are skipped so multi-thousand-node
+// graphs don't pay per-frame text layout; explicit labels (hover/selected/
+// search/keyboard focus) still render.
+const LOD_NODE_THRESHOLD = 1500;
+
 export default function GraphView({ graph, selectedId, highlightIds, onSelect, onIsolate }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<ForceGraph<RuntimeNode, RuntimeLink> | null>(null);
   const hoverRef = useRef<RuntimeNode | null>(null);
   const lastClickRef = useRef<{ id: string; time: number }>({ id: "", time: 0 });
+  const focusRef = useRef<string | null>(null);
 
   // Interaction state lives in refs so canvas callbacks always see fresh values
   // without re-creating the graph instance.
-  const stateRef = useRef({ selectedId, highlightIds, neighbors: new Set<string>() });
+  const stateRef = useRef({
+    selectedId,
+    highlightIds,
+    neighbors: new Set<string>(),
+    neighborList: [] as string[],
+    nodeCount: 0,
+  });
 
   const neighbors = useMemo(() => {
     const set = new Set<string>();
@@ -59,7 +71,55 @@ export default function GraphView({ graph, selectedId, highlightIds, onSelect, o
     return set;
   }, [graph, selectedId]);
 
-  stateRef.current = { selectedId, highlightIds, neighbors };
+  const neighborList = useMemo(
+    () => [...neighbors].filter((id) => id !== selectedId),
+    [neighbors, selectedId],
+  );
+
+  stateRef.current = { selectedId, highlightIds, neighbors, neighborList, nodeCount: graph.nodes.length };
+
+  useEffect(() => {
+    focusRef.current = null;
+  }, [selectedId, graph]);
+
+  useEffect(() => {
+    const isTextTarget = (el: Element | null) =>
+      el instanceof HTMLElement &&
+      (el.tagName === "INPUT" ||
+        el.tagName === "TEXTAREA" ||
+        el.tagName === "SELECT" ||
+        el.tagName === "BUTTON" ||
+        el.isContentEditable);
+    const requestRedraw = () => {
+      const fg = graphRef.current;
+      // Re-setting a paint prop flags needsRedraw — the render loop is paused
+      // after cooldown, so ref changes alone never reach the canvas.
+      if (fg) fg.nodeCanvasObject(fg.nodeCanvasObject());
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight" && e.key !== "Enter") return;
+      if (isTextTarget(document.activeElement)) return;
+      const { selectedId: sel, neighborList: list } = stateRef.current;
+      if (!sel) return;
+      if (e.key === "Enter") {
+        if (focusRef.current) {
+          e.preventDefault();
+          onSelect(focusRef.current);
+        }
+        return;
+      }
+      if (list.length === 0) return;
+      e.preventDefault();
+      const idx = focusRef.current ? list.indexOf(focusRef.current) : -1;
+      focusRef.current =
+        e.key === "ArrowRight"
+          ? list[(idx + 1) % list.length]
+          : list[idx <= 0 ? list.length - 1 : idx - 1];
+      requestRedraw();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onSelect]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -108,10 +168,25 @@ export default function GraphView({ graph, selectedId, highlightIds, onSelect, o
           ctx.stroke();
         }
 
+        const focused = focusRef.current === node.id && node.id !== sel;
+        if (focused) {
+          ctx.setLineDash([3 / globalScale, 2 / globalScale]);
+          ctx.lineWidth = 1.5 / globalScale;
+          ctx.strokeStyle = "#ffffff";
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
         const hovered = hoverRef.current?.id === node.id;
         const searchHit = hilite !== null && hilite.has(node.id);
+        const lod = stateRef.current.nodeCount > LOD_NODE_THRESHOLD;
         const showLabel =
-          !dimmed && (hovered || node.id === sel || searchHit || globalScale > 2.2 || (globalScale > 1.2 && node.degree >= 8));
+          !dimmed &&
+          (hovered ||
+            node.id === sel ||
+            searchHit ||
+            focused ||
+            (!lod && (globalScale > 2.2 || (globalScale > 1.2 && node.degree >= 8))));
         if (showLabel) {
           const fontSize = Math.max(11 / globalScale, 2.2);
           ctx.font = `${hovered || node.id === sel ? 600 : 400} ${fontSize}px Inter, sans-serif`;
