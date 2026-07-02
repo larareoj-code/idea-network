@@ -1,7 +1,8 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import type { GraphData, NodeType } from "../lib/types";
 import { NODE_COLORS } from "./GraphView";
 import { APP_VERSION } from "../lib/dataset";
+import { QUERY_HELP } from "../lib/query";
 
 const TYPE_LABELS: Record<NodeType, string> = {
   person: "People",
@@ -16,6 +17,8 @@ interface Props {
   graph: GraphData | null;
   search: string;
   onSearch: (v: string) => void;
+  hideNonMatching: boolean;
+  onToggleHide: (v: boolean) => void;
   enabledTypes: Set<NodeType>;
   onToggleType: (t: NodeType) => void;
   showPersonLinks: boolean;
@@ -31,6 +34,8 @@ export default function Sidebar({
   graph,
   search,
   onSearch,
+  hideNonMatching,
+  onToggleHide,
   enabledTypes,
   onToggleType,
   showPersonLinks,
@@ -80,16 +85,12 @@ export default function Sidebar({
         />
       </div>
 
-      <div>
-        <div className="section-label">Search</div>
-        <input
-          className="search-input"
-          type="search"
-          placeholder="Filter nodes…"
-          value={search}
-          onChange={(e) => onSearch(e.target.value)}
-        />
-      </div>
+      <QuerySection
+        search={search}
+        onSearch={onSearch}
+        hideNonMatching={hideNonMatching}
+        onToggleHide={onToggleHide}
+      />
 
       <div>
         <div className="section-label">Node types</div>
@@ -147,9 +148,54 @@ export default function Sidebar({
       </div>
 
       <div className="sidebar-footer">
-        Click a node to inspect · double-click to isolate its neighborhood · click the background
-        to reset.
+        Click a node to inspect · double-click to isolate · <kbd>Ctrl</kbd>+<kbd>K</kbd> command
+        palette · <kbd>Esc</kbd> reset.
       </div>
     </aside>
+  );
+}
+
+function QuerySection({
+  search,
+  onSearch,
+  hideNonMatching,
+  onToggleHide,
+}: {
+  search: string;
+  onSearch: (v: string) => void;
+  hideNonMatching: boolean;
+  onToggleHide: (v: boolean) => void;
+}) {
+  const [showHelp, setShowHelp] = useState(false);
+  return (
+    <div>
+      <div className="section-label">
+        Search / query
+        <button className="help-toggle" onClick={() => setShowHelp((v) => !v)} title="Query syntax">
+          ?
+        </button>
+      </div>
+      <input
+        className="search-input"
+        type="search"
+        placeholder="phase · from:hunt · type:concept…"
+        value={search}
+        onChange={(e) => onSearch(e.target.value)}
+      />
+      <label className="toggle-row" style={{ marginTop: 6 }}>
+        <input type="checkbox" checked={hideNonMatching} onChange={(e) => onToggleHide(e.target.checked)} />
+        Hide non-matching nodes
+      </label>
+      {showHelp && (
+        <div className="query-help">
+          {QUERY_HELP.map(([syntax, desc]) => (
+            <div key={syntax} className="query-help-row">
+              <code>{syntax}</code>
+              <span>{desc}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

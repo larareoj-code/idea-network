@@ -9,16 +9,22 @@ import {
   mergeDataset,
   persistDataset,
 } from "./lib/dataset";
+import { runQuery } from "./lib/query";
 import GraphView from "./components/GraphView";
 import Sidebar, { ALL_TYPES } from "./components/Sidebar";
 import DetailPanel from "./components/DetailPanel";
 import StatsBar from "./components/StatsBar";
 import { DropOverlay, EmptyState } from "./components/UploadZone";
+import { ChartsPanel } from "./components/Charts";
+import AskPanel from "./components/AskPanel";
+import CommandPalette, { type PaletteAction } from "./components/CommandPalette";
 
 const SAMPLES = [
   { url: "samples/inbox.csv", name: "inbox.csv" },
   { url: "samples/sent.csv", name: "sent.csv" },
 ];
+
+type Panel = "details" | "charts" | "ask" | null;
 
 const linkEndId = (v: unknown): string =>
   typeof v === "object" && v !== null ? (v as { id: string }).id : (v as string);
@@ -28,19 +34,38 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [hideNonMatching, setHideNonMatching] = useState(false);
   const [enabledTypes, setEnabledTypes] = useState<Set<NodeType>>(new Set(ALL_TYPES));
   const [showPersonLinks, setShowPersonLinks] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isolatedId, setIsolatedId] = useState<string | null>(null);
+  const [panel, setPanel] = useState<Panel>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   useEffect(() => {
     if (dataset) persistDataset(dataset);
   }, [dataset]);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      } else if (e.key === "Escape" && !paletteOpen) {
+        setPanel(null);
+        setSelectedId(null);
+        setIsolatedId(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [paletteOpen]);
+
   const applyDataset = useCallback((next: Dataset | null) => {
     setDataset(next);
     setSelectedId(null);
     setIsolatedId(null);
+    setPanel(null);
   }, []);
 
   const ingestTexts = useCallback(
@@ -121,10 +146,18 @@ export default function App() {
     applyDataset(null);
   }, [applyDataset]);
 
-  // Visible graph = type filters + optional co-occurrence layer + isolation.
+  // Query matches over the full dataset (null = no active query).
+  const matchIds = useMemo<Set<string> | null>(() => {
+    if (!dataset) return null;
+    return runQuery(dataset, search);
+  }, [dataset, search]);
+
+  // Visible graph = type filters + optional co-occurrence layer + isolation
+  // + (optionally) hiding query non-matches.
   const visibleGraph = useMemo<GraphData | null>(() => {
     if (!dataset) return null;
     let nodes = dataset.graph.nodes.filter((n) => enabledTypes.has(n.type));
+    if (hideNonMatching && matchIds !== null) nodes = nodes.filter((n) => matchIds.has(n.id));
     let nodeIds = new Set(nodes.map((n) => n.id));
     let links = dataset.graph.links.filter(
       (l) =>
@@ -145,19 +178,10 @@ export default function App() {
       links = links.filter((l) => nodeIds.has(linkEndId(l.source)) && nodeIds.has(linkEndId(l.target)));
     }
     return { nodes, links };
-  }, [dataset, enabledTypes, showPersonLinks, isolatedId]);
+  }, [dataset, enabledTypes, showPersonLinks, isolatedId, hideNonMatching, matchIds]);
 
-  const highlightIds = useMemo<Set<string> | null>(() => {
-    const q = search.trim().toLowerCase();
-    if (!q || !visibleGraph) return null;
-    const set = new Set<string>();
-    for (const n of visibleGraph.nodes) {
-      if (n.label.toLowerCase().includes(q) || (n.fullLabel ?? "").toLowerCase().includes(q)) {
-        set.add(n.id);
-      }
-    }
-    return set;
-  }, [search, visibleGraph]);
+  // When hiding non-matches the graph is already filtered — no need to dim.
+  const highlightIds = hideNonMatching ? null : matchIds;
 
   const selectedNode = useMemo<GraphNode | null>(
     () => dataset?.graph.nodes.find((n) => n.id === selectedId) ?? null,
@@ -175,13 +199,48 @@ export default function App() {
 
   const onSelect = useCallback((id: string | null) => {
     setSelectedId(id);
-    if (id === null) setIsolatedId(null);
+    if (id === null) {
+      setIsolatedId(null);
+      setPanel((p) => (p === "details" ? null : p));
+    } else {
+      setPanel("details");
+    }
   }, []);
 
   const onIsolate = useCallback((id: string) => {
     setIsolatedId((prev) => (prev === id ? null : id));
     setSelectedId(id);
+    setPanel("details");
   }, []);
+
+  const onPickNode = useCallback((id: string) => {
+    setSelectedId(id);
+    setPanel("details");
+  }, []);
+
+  const onApplyQuery = useCallback((q: string) => {
+    setSearch(q);
+  }, []);
+
+  const paletteActions = useMemo<PaletteAction[]>(
+    () => [
+      { id: "charts", label: "Open charts", hint: "panel", run: () => setPanel("charts") },
+      { id: "ask", label: "Ask AI", hint: "panel", run: () => setPanel("ask") },
+      { id: "export", label: "Export dataset JSON", hint: "file", run: onExport },
+      { id: "clear-query", label: "Clear search / query", run: () => setSearch("") },
+      {
+        id: "reset-view",
+        label: "Reset view (selection, isolation, filters)",
+        run: () => {
+          setSelectedId(null);
+          setIsolatedId(null);
+          setPanel(null);
+          setEnabledTypes(new Set(ALL_TYPES));
+        },
+      },
+    ],
+    [onExport],
+  );
 
   return (
     <div className="app">
@@ -189,6 +248,8 @@ export default function App() {
         graph={dataset?.graph ?? null}
         search={search}
         onSearch={setSearch}
+        hideNonMatching={hideNonMatching}
+        onToggleHide={setHideNonMatching}
         enabledTypes={enabledTypes}
         onToggleType={onToggleType}
         showPersonLinks={showPersonLinks}
@@ -213,16 +274,53 @@ export default function App() {
             />
             {isolatedId && <div className="graph-hint">Isolated neighborhood — click background or double-click again to reset</div>}
             <StatsBar dataset={dataset} visibleNodes={visibleGraph.nodes.length} visibleLinks={visibleGraph.links.length} />
+
+            <div className="dock">
+              <button
+                className={`dock-btn ${panel === "charts" ? "active" : ""}`}
+                onClick={() => setPanel((p) => (p === "charts" ? null : "charts"))}
+                title="Charts"
+              >
+                📊
+              </button>
+              <button
+                className={`dock-btn ${panel === "ask" ? "active" : ""}`}
+                onClick={() => setPanel((p) => (p === "ask" ? null : "ask"))}
+                title="Ask AI"
+              >
+                ✦
+              </button>
+              <button className="dock-btn" onClick={() => setPaletteOpen(true)} title="Command palette (Ctrl+K)">
+                ⌘
+              </button>
+            </div>
+
             <DetailPanel
               dataset={dataset}
-              node={selectedNode}
-              onNavigate={setSelectedId}
-              onClose={() => setSelectedId(null)}
+              node={panel === "details" ? selectedNode : null}
+              onNavigate={onPickNode}
+              onClose={() => setPanel(null)}
             />
+            <div className={`detail ${panel === "charts" ? "open" : ""}`}>
+              {panel === "charts" && <ChartsPanel dataset={dataset} onPick={onPickNode} onClose={() => setPanel(null)} />}
+            </div>
+            <div className={`detail ${panel === "ask" ? "open" : ""}`}>
+              {panel === "ask" && (
+                <AskPanel dataset={dataset} onApplyQuery={onApplyQuery} onPick={onPickNode} onClose={() => setPanel(null)} />
+              )}
+            </div>
           </DropOverlay>
         )}
         {dataset && error && (
           <div className="graph-hint" style={{ color: "var(--danger)", top: 44 }}>{error}</div>
+        )}
+        {paletteOpen && (
+          <CommandPalette
+            dataset={dataset}
+            actions={paletteActions}
+            onSelectNode={onPickNode}
+            onClose={() => setPaletteOpen(false)}
+          />
         )}
       </main>
     </div>

@@ -2,7 +2,7 @@ import { analyze } from "./analyze";
 import type { Dataset, Message, SourceInfo } from "./types";
 
 export const SCHEMA_VERSION = 1 as const;
-export const APP_VERSION = "v0.1";
+export const APP_VERSION = "v0.2";
 
 const STORAGE_KEY = "idea-network:dataset:v1";
 const STORAGE_LIMIT_BYTES = 4_500_000;
