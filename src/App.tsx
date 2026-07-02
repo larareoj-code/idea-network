@@ -219,8 +219,10 @@ export default function App() {
   const onSelect = useCallback((id: string | null) => {
     setSelectedId(id);
     if (id === null) {
+      // Clicking empty graph space is a full reset: clear isolation and
+      // close whichever side panel (details/charts/ask) is open.
       setIsolatedId(null);
-      setPanel((p) => (p === "details" ? null : p));
+      setPanel(null);
     } else {
       setPanel("details");
     }
