@@ -1,12 +1,13 @@
 import { useRef, useState } from "react";
 import type { DragEvent, ReactNode } from "react";
-import { ACCEPTED_EXTENSIONS, FILE_ACCEPT } from "../lib/ingest";
+import { ACCEPTED_EXTENSIONS, FILE_ACCEPT, type ParseProgress } from "../lib/ingest";
 
 interface Props {
   onFiles: (files: File[]) => void;
   onLoadSamples: () => void;
   loading: boolean;
   error: string | null;
+  progress?: ParseProgress | null;
 }
 
 function useDrag(onFiles: (files: File[]) => void) {
@@ -40,7 +41,7 @@ function useDrag(onFiles: (files: File[]) => void) {
 }
 
 /** Full-screen hero shown when no data is loaded. */
-export function EmptyState({ onFiles, onLoadSamples, loading, error }: Props) {
+export function EmptyState({ onFiles, onLoadSamples, loading, error, progress }: Props) {
   const { drag, handlers } = useDrag(onFiles);
   const inputRef = useRef<HTMLInputElement>(null);
   return (
@@ -61,7 +62,11 @@ export function EmptyState({ onFiles, onLoadSamples, loading, error }: Props) {
         </div>
         <div className="btn-row" style={{ marginTop: 8 }}>
           <button className="btn primary" onClick={() => inputRef.current?.click()} disabled={loading}>
-            {loading ? "Parsing…" : "Choose files"}
+            {loading
+              ? progress
+                ? `Parsing ${progress.index + 1} of ${progress.total}: ${progress.name}`
+                : "Parsing…"
+              : "Choose files"}
           </button>
           <button className="btn" onClick={onLoadSamples} disabled={loading}>
             Load sample data

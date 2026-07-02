@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Dataset, GraphData, GraphNode, Message, NodeType } from "./lib/types";
 import { parseOutlookCsv } from "./lib/parseOutlookCsv";
-import { parseFile } from "./lib/ingest";
+import { parseFiles, type ParseProgress } from "./lib/ingest";
 import { exportDatasetJson, importDatasetJson, mergeDataset } from "./lib/dataset";
 import { clearDataset, loadDataset, saveDataset } from "./lib/storage";
 import { runQuery } from "./lib/query";
@@ -28,6 +28,7 @@ export default function App() {
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [booting, setBooting] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [parseProgress, setParseProgress] = useState<ParseProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [hideNonMatching, setHideNonMatching] = useState(false);
@@ -98,21 +99,14 @@ export default function App() {
     async (files: File[]) => {
       setLoading(true);
       setError(null);
-      const items: { name: string; messages: Message[] }[] = [];
-      const errors: string[] = [];
+      setParseProgress(null);
       try {
-        // Sequential: PST parsing is heavy, and one bad file shouldn't block the rest.
-        for (const f of files) {
-          try {
-            items.push(await parseFile(f));
-          } catch (e) {
-            errors.push(e instanceof Error ? e.message : String(e));
-          }
-        }
+        const { items, errors } = await parseFiles(files, setParseProgress);
         ingestItems(items);
         if (errors.length) setError(errors.join(" · "));
       } finally {
         setLoading(false);
+        setParseProgress(null);
       }
     },
     [ingestItems],
@@ -283,7 +277,7 @@ export default function App() {
       />
       <main className="main">
         {booting ? null : !dataset || !visibleGraph ? (
-          <EmptyState onFiles={onFiles} onLoadSamples={onLoadSamples} loading={loading} error={error} />
+          <EmptyState onFiles={onFiles} onLoadSamples={onLoadSamples} loading={loading} error={error} progress={parseProgress} />
         ) : (
           <DropOverlay onFiles={onFiles}>
             <GraphView
