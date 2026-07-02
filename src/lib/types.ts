@@ -28,6 +28,8 @@ export interface Message {
    * Outlook CSV exports contain no date column, so this is best-effort only.
    */
   approxDate?: string;
+  /** Exact date (ISO string) — available from PST/MSG/EML sources, never CSV. */
+  date?: string;
 }
 
 export type NodeType = "person" | "thread" | "concept" | "sop";

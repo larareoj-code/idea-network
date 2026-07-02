@@ -46,7 +46,11 @@ function MessageCard({ msg }: { msg: Message }) {
         </div>
         <div className="msg-meta">
           {msg.subject || "(no subject)"}
-          {msg.approxDate && <span className="approx"> · ~{msg.approxDate} (approx.)</span>}
+          {msg.date ? (
+            <span className="approx"> · {new Date(msg.date).toLocaleString()}</span>
+          ) : (
+            msg.approxDate && <span className="approx"> · ~{msg.approxDate} (approx.)</span>
+          )}
         </div>
       </summary>
       <div className="msg-body">

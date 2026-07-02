@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import type { DragEvent, ReactNode } from "react";
+import { ACCEPTED_EXTENSIONS, FILE_ACCEPT } from "../lib/ingest";
 
 interface Props {
   onFiles: (files: File[]) => void;
@@ -30,7 +31,7 @@ function useDrag(onFiles: (files: File[]) => void) {
         depth.current = 0;
         setDrag(false);
         const files = Array.from(e.dataTransfer.files).filter((f) =>
-          f.name.toLowerCase().endsWith(".csv"),
+          ACCEPTED_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext)),
         );
         if (files.length) onFiles(files);
       },
@@ -48,16 +49,19 @@ export function EmptyState({ onFiles, onLoadSamples, loading, error }: Props) {
         <div className="glyph">🕸️</div>
         <h2>Build your idea network</h2>
         <p>
-          Drop one or more Outlook CSV exports here to map people, threads, concepts, and
-          SOP/data references from your email.
+          Drop Outlook exports here — <b>.pst</b> data files, <b>.csv</b> exports, or individual{" "}
+          <b>.msg</b> / <b>.eml</b> messages — to map people, threads, concepts, and SOP/data
+          references from your email.
         </p>
         <div className="steps">
-          In Outlook: <code>File → Open &amp; Export → Import/Export → Export to a file →
-          Comma Separated Values</code> — then drop the CSV(s) here.
+          In Outlook: <code>File → Open &amp; Export → Import/Export → Export to a file</code> —
+          pick <code>Outlook Data File (.pst)</code> (keeps dates) or{" "}
+          <code>Comma Separated Values</code>, then drop the file(s) here. You can also drag
+          messages straight out of Outlook and drop the .msg files.
         </div>
         <div className="btn-row" style={{ marginTop: 8 }}>
           <button className="btn primary" onClick={() => inputRef.current?.click()} disabled={loading}>
-            {loading ? "Parsing…" : "Choose CSV files"}
+            {loading ? "Parsing…" : "Choose files"}
           </button>
           <button className="btn" onClick={onLoadSamples} disabled={loading}>
             Load sample data
@@ -67,7 +71,7 @@ export function EmptyState({ onFiles, onLoadSamples, loading, error }: Props) {
         <input
           ref={inputRef}
           type="file"
-          accept=".csv,text/csv"
+          accept={FILE_ACCEPT}
           multiple
           hidden
           onChange={(e) => {

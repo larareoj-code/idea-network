@@ -3,6 +3,7 @@ import type { GraphData, NodeType } from "../lib/types";
 import { NODE_COLORS } from "./GraphView";
 import { APP_VERSION } from "../lib/dataset";
 import { QUERY_HELP } from "../lib/query";
+import { FILE_ACCEPT } from "../lib/ingest";
 
 const TYPE_LABELS: Record<NodeType, string> = {
   person: "People",
@@ -63,7 +64,7 @@ export default function Sidebar({
         <div className="section-label">Data</div>
         <div className="btn-row">
           <button className="btn primary" onClick={() => csvInputRef.current?.click()}>
-            Add CSV…
+            Add files…
           </button>
           {hasData && (
             <button className="btn danger" onClick={onClear} title="Clear all loaded data">
@@ -74,7 +75,7 @@ export default function Sidebar({
         <input
           ref={csvInputRef}
           type="file"
-          accept=".csv,text/csv"
+          accept={FILE_ACCEPT}
           multiple
           hidden
           onChange={(e) => {

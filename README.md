@@ -17,11 +17,21 @@ npm test         # vitest — parses the real CSVs in data/ and validates the pi
 Open the dev server, then either drop your own Outlook CSV export(s) onto the page
 or click **Load sample data**.
 
-## Data format
+## Data formats
 
-Outlook CSV export (`File → Open & Export → Import/Export → Export to a file →
-Comma Separated Values`), UTF-8 with BOM. Expected columns include `Subject`,
-`Body`, `From/To/CC/BCC (Name)/(Address)/(Type)`, `Importance`, `Categories`.
+Four Outlook formats are ingested (drop or pick any mix of files):
+
+- **.pst** — Outlook Data File (`File → Open & Export → Import/Export → Export to a
+  file → Outlook Data File`). Every folder is walked; carries **real timestamps**.
+  Parsed lazily in the browser via `pst-extractor` (capped at 20k messages).
+- **.csv** — Outlook CSV export (`… → Comma Separated Values`), UTF-8 with BOM.
+  Expected columns include `Subject`, `Body`, `From/To/CC/BCC (Name)/(Address)/(Type)`,
+  `Importance`, `Categories`. No date column exists in this format.
+- **.msg** — individual messages dragged out of Outlook (CFB format, via
+  `@kenjiuno/msgreader`). Carries real timestamps.
+- **.eml** — RFC-822 messages (hand-rolled parser: folded headers, RFC 2047
+  subjects, quoted-printable/base64, first text/plain part of multipart).
+  Carries real timestamps.
 
 Important notes about this format:
 

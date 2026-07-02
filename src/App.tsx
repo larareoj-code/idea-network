@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Dataset, GraphData, GraphNode, NodeType } from "./lib/types";
+import type { Dataset, GraphData, GraphNode, Message, NodeType } from "./lib/types";
 import { parseOutlookCsv } from "./lib/parseOutlookCsv";
+import { parseFile } from "./lib/ingest";
 import {
   clearPersistedDataset,
   exportDatasetJson,
@@ -68,20 +69,11 @@ export default function App() {
     setPanel(null);
   }, []);
 
-  const ingestTexts = useCallback(
-    (items: { name: string; text: string }[]) => {
-      setError(null);
-      try {
-        let next = dataset;
-        for (const item of items) {
-          const messages = parseOutlookCsv(item.text, item.name);
-          if (messages.length === 0) throw new Error(`${item.name}: no messages found — is this an Outlook CSV export?`);
-          next = mergeDataset(next, messages, item.name);
-        }
-        applyDataset(next);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
-      }
+  const ingestItems = useCallback(
+    (items: { name: string; messages: Message[] }[]) => {
+      let next = dataset;
+      for (const item of items) next = mergeDataset(next, item.messages, item.name);
+      if (items.length > 0) applyDataset(next);
     },
     [dataset, applyDataset],
   );
@@ -89,14 +81,25 @@ export default function App() {
   const onFiles = useCallback(
     async (files: File[]) => {
       setLoading(true);
+      setError(null);
+      const items: { name: string; messages: Message[] }[] = [];
+      const errors: string[] = [];
       try {
-        const items = await Promise.all(files.map(async (f) => ({ name: f.name, text: await f.text() })));
-        ingestTexts(items);
+        // Sequential: PST parsing is heavy, and one bad file shouldn't block the rest.
+        for (const f of files) {
+          try {
+            items.push(await parseFile(f));
+          } catch (e) {
+            errors.push(e instanceof Error ? e.message : String(e));
+          }
+        }
+        ingestItems(items);
+        if (errors.length) setError(errors.join(" · "));
       } finally {
         setLoading(false);
       }
     },
-    [ingestTexts],
+    [ingestItems],
   );
 
   const onLoadSamples = useCallback(async () => {
@@ -107,16 +110,16 @@ export default function App() {
         SAMPLES.map(async (s) => {
           const res = await fetch(`${import.meta.env.BASE_URL}${s.url}`);
           if (!res.ok) throw new Error(`Failed to fetch sample ${s.name} (${res.status})`);
-          return { name: s.name, text: await res.text() };
+          return { name: s.name, messages: parseOutlookCsv(await res.text(), s.name) };
         }),
       );
-      ingestTexts(items);
+      ingestItems(items);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
-  }, [ingestTexts]);
+  }, [ingestItems]);
 
   const onExport = useCallback(() => {
     if (!dataset) return;

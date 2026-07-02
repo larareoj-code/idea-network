@@ -174,7 +174,8 @@ export function analyze(messages: Message[], options: AnalyzeOptions = {}): Grap
     thread.count += 1;
     tMeta.messageIds.push(msg.id);
     if (!msg.lowSignal) tMeta.lowSignal = false;
-    if (msg.approxDate) pushUnique(tMeta.approxDates, msg.approxDate);
+    const seenDate = msg.date ? new Date(msg.date).toLocaleDateString() : msg.approxDate;
+    if (seenDate) pushUnique(tMeta.approxDates, seenDate);
 
     const participants: Participant[] = [];
     if (msg.from) participants.push(msg.from);
