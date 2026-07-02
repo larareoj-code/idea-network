@@ -35,7 +35,7 @@ export function parseMsg(buffer: ArrayBuffer, source: string): Message[] {
 
   return [
     {
-      id: hashMessage(subject, body, from?.address ?? ""),
+      id: hashMessage(subject, body, from?.address ?? "", [...to, ...cc].map((p) => p.key), date ?? ""),
       subject,
       body,
       from,

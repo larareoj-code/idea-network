@@ -1,5 +1,27 @@
 import { describe, expect, it } from "vitest";
 import { parseEml } from "../src/lib/parseEml";
+import { hashMessage } from "../src/lib/parseOutlookCsv";
+
+describe("hashMessage", () => {
+  it("distinguishes messages that differ only in recipients", () => {
+    const a = hashMessage("Weekly Safety Brief", "Same body", "john@x.mil", ["amy@x.mil"]);
+    const b = hashMessage("Weekly Safety Brief", "Same body", "john@x.mil", ["bob@x.mil"]);
+    expect(a).not.toBe(b);
+  });
+
+  it("distinguishes messages that differ only in date", () => {
+    const a = hashMessage("Daily report", "Same body", "x@y.mil", [], "2026-06-01T00:00:00Z");
+    const b = hashMessage("Daily report", "Same body", "x@y.mil", [], "2026-06-02T00:00:00Z");
+    expect(a).not.toBe(b);
+  });
+
+  it("is order-insensitive for recipients and 64-bit wide", () => {
+    const a = hashMessage("s", "b", "f", ["p", "q"]);
+    const b = hashMessage("s", "b", "f", ["q", "p"]);
+    expect(a).toBe(b);
+    expect(a).toMatch(/^[0-9a-f]{16}$/);
+  });
+});
 
 const SIMPLE_EML = `From: "Thomas, Walter D LTC USARMY" <walter.d.thomas.mil@army.mil>\r
 To: "Larareo, Josef A CW2 USARMY" <josef.a.larareo.mil@army.mil>, ops@example.com\r

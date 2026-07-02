@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { Dataset } from "../lib/types";
 import {
   askAssistant,
@@ -12,6 +12,7 @@ import { buildChart } from "../lib/charts";
 import { Chart } from "./Charts";
 
 interface Exchange {
+  id: number;
   question: string;
   result?: AssistantResult;
   error?: string;
@@ -30,6 +31,7 @@ export default function AskPanel({ dataset, onApplyQuery, onPick, onClose }: Pro
   const [showSettings, setShowSettings] = useState(() => !loadLlmConfig().apiKey);
   const [question, setQuestion] = useState("");
   const [history, setHistory] = useState<Exchange[]>([]);
+  const nextId = useRef(0);
 
   const preset = useMemo(() => LLM_PRESETS.find((p) => p.id === config.provider), [config.provider]);
   const keyMissing = (preset?.needsKey ?? true) && !config.apiKey;
@@ -49,14 +51,15 @@ export default function AskPanel({ dataset, onApplyQuery, onPick, onClose }: Pro
     const q = question.trim();
     if (!q || keyMissing) return;
     setQuestion("");
-    setHistory((h) => [{ question: q, pending: true }, ...h]);
+    const id = nextId.current++;
+    setHistory((h) => [{ id, question: q, pending: true }, ...h]);
     try {
       const result = await askAssistant(config, dataset, q);
-      setHistory((h) => h.map((x, i) => (i === 0 ? { question: q, result } : x)));
+      setHistory((h) => h.map((x) => (x.id === id ? { id, question: q, result } : x)));
       if (result.query) onApplyQuery(result.query);
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
-      setHistory((h) => h.map((x, i) => (i === 0 ? { question: q, error } : x)));
+      setHistory((h) => h.map((x) => (x.id === id ? { id, question: q, error } : x)));
     }
   };
 
@@ -129,8 +132,8 @@ export default function AskPanel({ dataset, onApplyQuery, onPick, onClose }: Pro
           </button>
         </div>
 
-        {history.map((x, i) => (
-          <div key={history.length - i} className="detail-section ask-exchange">
+        {history.map((x) => (
+          <div key={x.id} className="detail-section ask-exchange">
             <div className="ask-q">{x.question}</div>
             {x.pending && <div className="ask-pending">Thinking…</div>}
             {x.error && <div className="ask-error">{x.error}</div>}

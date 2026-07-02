@@ -134,20 +134,20 @@ export function buildChart(dataset: Dataset, metric: ChartMetric, topN = 10): Ch
           undated += 1;
           continue;
         }
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        // UTC so a message lands in the same month for every viewer.
+        const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
         buckets.set(key, (buckets.get(key) ?? 0) + 1);
       }
-      const data: ChartDatum[] = [...buckets.entries()]
-        .sort((a, b) => (a[0] < b[0] ? -1 : 1))
-        .slice(-Math.max(topN, 12))
-        .map(([label, value]) => ({ label, value }));
+      const sorted = [...buckets.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
+      const shown = sorted.slice(-Math.max(topN, 12));
+      const hidden = sorted.length - shown.length;
+      const notes: string[] = [];
+      if (undated > 0) notes.push(`${undated} undated from CSV sources excluded`);
+      if (hidden > 0) notes.push(`${hidden} older months hidden`);
       return {
         kind: "bar",
-        title:
-          undated > 0
-            ? `Messages over time (${undated} undated from CSV sources excluded)`
-            : "Messages over time",
-        data,
+        title: notes.length > 0 ? `Messages over time (${notes.join("; ")})` : "Messages over time",
+        data: shown.map(([label, value]) => ({ label, value })),
       };
     }
     case "type-distribution": {

@@ -43,7 +43,7 @@ function Bars({ spec, onPick }: { spec: ChartSpec; onPick?: (nodeId: string) => 
 }
 
 function Donut({ spec }: { spec: ChartSpec }) {
-  const total = spec.data.reduce((s, d) => s + d.value, 0);
+  const total = spec.data.reduce((s, d) => s + d.value, 0) || 1;
   const R = 52;
   const C = 2 * Math.PI * R;
   let offset = 0;

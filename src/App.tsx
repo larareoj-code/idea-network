@@ -42,7 +42,8 @@ export default function App() {
     let cancelled = false;
     void loadDataset().then((d) => {
       if (cancelled) return;
-      if (d) setDataset(d);
+      // Never clobber data the user uploaded while the load was in flight.
+      if (d) setDataset((prev) => prev ?? d);
       setBooting(false);
     });
     return () => {
@@ -78,11 +79,19 @@ export default function App() {
 
   const ingestItems = useCallback(
     (items: { name: string; messages: Message[] }[]) => {
-      let next = dataset;
-      for (const item of items) next = mergeDataset(next, item.messages, item.name);
-      if (items.length > 0) applyDataset(next);
+      if (items.length === 0) return;
+      // Functional update: overlapping async uploads must merge into the
+      // latest dataset, not the one captured when parsing started.
+      setDataset((prev) => {
+        let next = prev;
+        for (const item of items) next = mergeDataset(next, item.messages, item.name);
+        return next;
+      });
+      setSelectedId(null);
+      setIsolatedId(null);
+      setPanel(null);
     },
-    [dataset, applyDataset],
+    [],
   );
 
   const onFiles = useCallback(

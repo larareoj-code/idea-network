@@ -80,7 +80,7 @@ function convertMessage(pstMsg: PstMessageLike, source: string): Message | null 
   const date = when && !Number.isNaN(when.getTime()) ? when.toISOString() : undefined;
 
   return {
-    id: hashMessage(subject, body, from?.address ?? ""),
+    id: hashMessage(subject, body, from?.address ?? "", [...to, ...cc].map((p) => p.key), date ?? ""),
     subject,
     body,
     from,
@@ -120,6 +120,22 @@ export async function parsePst(buffer: ArrayBuffer, source: string): Promise<Mes
     );
   }
   const out: Message[] = [];
-  walkFolder(pst.getRootFolder() as unknown as PstFolderLike, source, out);
+  // pst-extractor console.errors once per non-mail item (contacts, calendar);
+  // silence just that noise for the duration of the walk.
+  const originalError = console.error;
+  let suppressed = 0;
+  console.error = (...args: unknown[]) => {
+    if (typeof args[0] === "string" && args[0].includes("PSTUtil")) {
+      suppressed += 1;
+      return;
+    }
+    originalError(...args);
+  };
+  try {
+    walkFolder(pst.getRootFolder() as unknown as PstFolderLike, source, out);
+  } finally {
+    console.error = originalError;
+  }
+  if (suppressed > 0) console.info(`${source}: skipped ${suppressed} non-mail items (contacts, calendar, …)`);
   return out;
 }

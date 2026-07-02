@@ -32,25 +32,34 @@ function unfoldHeaders(raw: string): Map<string, string> {
   return headers;
 }
 
-/** Decode RFC 2047 encoded-words in header values: =?utf-8?B?...?= / =?utf-8?Q?...?= */
+/** TextDecoder for the declared charset, falling back to UTF-8 for unknown labels. */
+function decoderFor(charset: string): TextDecoder {
+  try {
+    return new TextDecoder(charset || "utf-8", { fatal: false });
+  } catch {
+    return new TextDecoder("utf-8", { fatal: false });
+  }
+}
+
+/** Decode RFC 2047 encoded-words in header values: =?charset?B?...?= / =?charset?Q?...?= */
 function decodeHeaderValue(value: string): string {
-  return value.replace(/=\?([^?]+)\?([BbQq])\?([^?]*)\?=/g, (_, _charset, enc: string, text: string) => {
+  return value.replace(/=\?([^?]+)\?([BbQq])\?([^?]*)\?=/g, (_, charset: string, enc: string, text: string) => {
     try {
-      if (enc.toUpperCase() === "B") return decodeBase64(text);
-      return decodeQuotedPrintable(text.replace(/_/g, " "));
+      if (enc.toUpperCase() === "B") return decodeBase64(text, charset);
+      return decodeQuotedPrintable(text.replace(/_/g, " "), charset);
     } catch {
       return text;
     }
   });
 }
 
-function decodeBase64(text: string): string {
+function decodeBase64(text: string, charset = "utf-8"): string {
   const bin = atob(text.replace(/\s+/g, ""));
   const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
-  return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  return decoderFor(charset).decode(bytes);
 }
 
-function decodeQuotedPrintable(text: string): string {
+function decodeQuotedPrintable(text: string, charset = "utf-8"): string {
   const joined = text.replace(/=\r?\n/g, "");
   const bytes: number[] = [];
   for (let i = 0; i < joined.length; i++) {
@@ -58,10 +67,10 @@ function decodeQuotedPrintable(text: string): string {
       bytes.push(parseInt(joined.slice(i + 1, i + 3), 16));
       i += 2;
     } else {
-      bytes.push(joined.charCodeAt(i));
+      bytes.push(joined.charCodeAt(i) & 0xff);
     }
   }
-  return new TextDecoder("utf-8", { fatal: false }).decode(new Uint8Array(bytes));
+  return decoderFor(charset).decode(new Uint8Array(bytes));
 }
 
 /** "Display Name <addr@x>" | "addr@x" | '"Last, First" <addr@x>' → Participant */
@@ -101,6 +110,7 @@ function splitAddresses(value: string): string[] {
 function extractTextBody(headers: Map<string, string>, rawBody: string): string {
   const contentType = headers.get("content-type") ?? "text/plain";
   const encoding = (headers.get("content-transfer-encoding") ?? "").toLowerCase();
+  const charset = contentType.match(/charset\s*=\s*"?([^";]+)"?/i)?.[1] ?? "utf-8";
 
   const boundaryMatch = contentType.match(/boundary\s*=\s*"?([^";]+)"?/i);
   if (boundaryMatch) {
@@ -134,12 +144,12 @@ function extractTextBody(headers: Map<string, string>, rawBody: string): string 
 
   if (encoding === "base64") {
     try {
-      return decodeBase64(rawBody);
+      return decodeBase64(rawBody, charset);
     } catch {
       return rawBody;
     }
   }
-  if (encoding === "quoted-printable") return decodeQuotedPrintable(rawBody);
+  if (encoding === "quoted-printable") return decodeQuotedPrintable(rawBody, charset);
   return rawBody;
 }
 
@@ -168,7 +178,7 @@ export function parseEml(text: string, source: string): Message[] {
 
   return [
     {
-      id: hashMessage(subject, body, from?.address ?? ""),
+      id: hashMessage(subject, body, from?.address ?? "", [...to, ...cc].map((p) => p.key), date ?? ""),
       subject,
       body,
       from,
