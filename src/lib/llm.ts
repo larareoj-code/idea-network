@@ -1,5 +1,6 @@
 import type { Dataset, PersonMeta, ThreadMeta } from "./types";
 import { CHART_METRICS, isChartMetric, type ChartMetric } from "./charts";
+import { formatExcerpts, retrieveMessages } from "./retrieval";
 
 /**
  * Provider-agnostic client for any OpenAI-compatible chat completions API.
@@ -89,7 +90,7 @@ interface ChatMessage {
   content: string;
 }
 
-export async function chatCompletion(config: LlmConfig, messages: ChatMessage[]): Promise<string> {
+async function postChat(config: LlmConfig, body: Record<string, unknown>): Promise<Response> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
 
@@ -98,7 +99,7 @@ export async function chatCompletion(config: LlmConfig, messages: ChatMessage[])
     res = await fetch(`${config.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ model: config.model, messages, temperature: 0.2 }),
+      body: JSON.stringify(body),
     });
   } catch (e) {
     throw new Error(
@@ -106,16 +107,86 @@ export async function chatCompletion(config: LlmConfig, messages: ChatMessage[])
     );
   }
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    const detail = body.slice(0, 300);
+    const errBody = await res.text().catch(() => "");
+    const detail = errBody.slice(0, 300);
     if (res.status === 401 || res.status === 403) throw new Error(`Auth failed (${res.status}) — check your API key. ${detail}`);
     if (res.status === 429) throw new Error(`Rate limited (429) — free tier quota hit, wait a moment. ${detail}`);
     throw new Error(`LLM request failed (${res.status}): ${detail}`);
   }
-  const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+  return res;
+}
+
+function contentFromJson(data: { choices?: { message?: { content?: string } }[] }): string {
   const content = data.choices?.[0]?.message?.content;
   if (!content) throw new Error("LLM returned an empty response.");
   return content;
+}
+
+export async function chatCompletion(config: LlmConfig, messages: ChatMessage[]): Promise<string> {
+  const res = await postChat(config, { model: config.model, messages, temperature: 0.2 });
+  return contentFromJson((await res.json()) as { choices?: { message?: { content?: string } }[] });
+}
+
+interface SseChunk {
+  choices?: { delta?: { content?: string }; message?: { content?: string } }[];
+}
+
+/**
+ * Streaming variant: OpenAI-style SSE (`data: {...}` lines, `data: [DONE]`
+ * terminator). Falls back to plain JSON parsing if the server ignores
+ * `stream: true` and answers with a normal completion body.
+ */
+export async function streamChatCompletion(
+  config: LlmConfig,
+  messages: ChatMessage[],
+  onToken?: (token: string) => void,
+): Promise<string> {
+  const res = await postChat(config, { model: config.model, messages, temperature: 0.2, stream: true });
+
+  const contentType = res.headers.get("content-type") ?? "";
+  if (!res.body || contentType.includes("application/json")) {
+    const content = contentFromJson((await res.json()) as { choices?: { message?: { content?: string } }[] });
+    onToken?.(content);
+    return content;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let full = "";
+
+  const consume = (line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("data:")) return;
+    const payload = trimmed.slice(5).trim();
+    if (!payload || payload === "[DONE]") return;
+    try {
+      const chunk = JSON.parse(payload) as SseChunk;
+      const token = chunk.choices?.[0]?.delta?.content ?? chunk.choices?.[0]?.message?.content;
+      if (typeof token === "string" && token) {
+        full += token;
+        onToken?.(token);
+      }
+    } catch {
+      // keep-alive / malformed line — skip
+    }
+  };
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let nl: number;
+    while ((nl = buffer.indexOf("\n")) !== -1) {
+      consume(buffer.slice(0, nl));
+      buffer = buffer.slice(nl + 1);
+    }
+  }
+  buffer += decoder.decode();
+  if (buffer) consume(buffer);
+
+  if (!full) throw new Error("LLM returned an empty response.");
+  return full;
 }
 
 /** Compact plain-text digest of the dataset for the LLM's context window. */
@@ -157,9 +228,9 @@ export interface AssistantResult {
 
 const SYSTEM_PROMPT = `You are the analysis assistant inside "Idea Network", a tool that visualizes an email network graph (people, threads, concepts, SOP/data references).
 
-You will get a dataset digest and a user question. Respond with ONLY a JSON object, no markdown fences, matching:
+You will get a dataset digest, possibly some relevant message excerpts, and a user question. Respond with ONLY a JSON object, no markdown fences, matching:
 {
-  "answer": "<concise answer to the question, grounded in the digest>",
+  "answer": "<concise answer to the question, grounded in the digest and excerpts — quote or cite excerpts (sender, subject) when they answer the question>",
   "query": "<optional graph query to highlight relevant nodes>",
   "chart": { "metric": "<optional metric id>", "topN": <number 3-20> }
 }
@@ -168,7 +239,7 @@ Query DSL (only include "query" when highlighting helps): free text matches node
 
 Chart metric ids (only include "chart" when the question is quantitative): ${CHART_METRICS.map((m) => m.id).join(", ")}.
 
-Never invent people, threads, or numbers not present in the digest.`;
+Never invent people, threads, or numbers not present in the digest or excerpts.`;
 
 function extractJson(text: string): string {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -183,11 +254,23 @@ export async function askAssistant(
   config: LlmConfig,
   dataset: Dataset,
   question: string,
+  onToken?: (token: string) => void,
 ): Promise<AssistantResult> {
-  const content = await chatCompletion(config, [
-    { role: "system", content: SYSTEM_PROMPT },
-    { role: "user", content: `Dataset digest:\n${buildDatasetContext(dataset)}\n\nQuestion: ${question}` },
-  ]);
+  const excerptBlock = formatExcerpts(retrieveMessages(dataset, question));
+  const userContent = [
+    `Dataset digest:\n${buildDatasetContext(dataset)}`,
+    ...(excerptBlock ? [`Relevant message excerpts:\n${excerptBlock}`] : []),
+    `Question: ${question}`,
+  ].join("\n\n");
+
+  const content = await streamChatCompletion(
+    config,
+    [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: userContent },
+    ],
+    onToken,
+  );
 
   let parsed: Record<string, unknown>;
   try {

@@ -1,4 +1,5 @@
 import type { Dataset } from "./types";
+import type { AssistantResult } from "./llm";
 import { exportDatasetJson, importDatasetJson } from "./dataset";
 
 /**
@@ -10,8 +11,9 @@ import { exportDatasetJson, importDatasetJson } from "./dataset";
  */
 
 const DB_NAME = "idea-network";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE = "datasets";
+const HISTORY_STORE = "askHistory";
 const KEY = "current";
 const LEGACY_LS_KEY = "idea-network:dataset:v1";
 
@@ -20,6 +22,7 @@ function openDb(): Promise<IDBDatabase> {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE);
+      if (!req.result.objectStoreNames.contains(HISTORY_STORE)) req.result.createObjectStore(HISTORY_STORE);
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error ?? new Error("IndexedDB open failed"));
@@ -100,6 +103,56 @@ export async function clearDataset(): Promise<void> {
     const db = await openDb();
     const tx = db.transaction(STORE, "readwrite");
     tx.objectStore(STORE).delete(KEY);
+    await txDone(tx);
+    db.close();
+  } catch {
+    // ignore
+  }
+}
+
+export interface AskHistoryEntry {
+  id: number;
+  question: string;
+  result?: AssistantResult;
+  error?: string;
+}
+
+/** Best-effort save of the Ask AI conversation, mirroring saveDataset. */
+export async function saveAskHistory(entries: AskHistoryEntry[]): Promise<void> {
+  try {
+    const db = await openDb();
+    const tx = db.transaction(HISTORY_STORE, "readwrite");
+    tx.objectStore(HISTORY_STORE).put(JSON.stringify(entries), KEY);
+    await txDone(tx);
+    db.close();
+  } catch {
+    // private mode / quota / blocked — skip silently
+  }
+}
+
+export async function loadAskHistory(): Promise<AskHistoryEntry[] | null> {
+  try {
+    const db = await openDb();
+    const tx = db.transaction(HISTORY_STORE, "readonly");
+    const req = tx.objectStore(HISTORY_STORE).get(KEY);
+    const json = await new Promise<string | null>((resolve, reject) => {
+      req.onsuccess = () => resolve(typeof req.result === "string" ? req.result : null);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    if (!json) return null;
+    const parsed = JSON.parse(json) as unknown;
+    return Array.isArray(parsed) ? (parsed as AskHistoryEntry[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function clearAskHistory(): Promise<void> {
+  try {
+    const db = await openDb();
+    const tx = db.transaction(HISTORY_STORE, "readwrite");
+    tx.objectStore(HISTORY_STORE).delete(KEY);
     await txDone(tx);
     db.close();
   } catch {

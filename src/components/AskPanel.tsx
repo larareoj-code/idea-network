@@ -1,21 +1,17 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dataset } from "../lib/types";
 import {
   askAssistant,
   loadLlmConfig,
   saveLlmConfig,
   LLM_PRESETS,
-  type AssistantResult,
   type LlmConfig,
 } from "../lib/llm";
+import { loadAskHistory, saveAskHistory, type AskHistoryEntry } from "../lib/storage";
 import { buildChart } from "../lib/charts";
 import { Chart } from "./Charts";
 
-interface Exchange {
-  id: number;
-  question: string;
-  result?: AssistantResult;
-  error?: string;
+interface Exchange extends AskHistoryEntry {
   pending?: boolean;
 }
 
@@ -32,6 +28,26 @@ export default function AskPanel({ dataset, onApplyQuery, onPick, onClose }: Pro
   const [question, setQuestion] = useState("");
   const [history, setHistory] = useState<Exchange[]>([]);
   const nextId = useRef(0);
+  const historyLoaded = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadAskHistory().then((entries) => {
+      if (!cancelled && entries && entries.length > 0) {
+        setHistory(entries);
+        nextId.current = Math.max(...entries.map((e) => e.id)) + 1;
+      }
+      historyLoaded.current = true;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!historyLoaded.current || history.some((x) => x.pending)) return;
+    void saveAskHistory(history.map(({ pending: _pending, ...entry }) => entry));
+  }, [history]);
 
   const preset = useMemo(() => LLM_PRESETS.find((p) => p.id === config.provider), [config.provider]);
   const keyMissing = (preset?.needsKey ?? true) && !config.apiKey;
