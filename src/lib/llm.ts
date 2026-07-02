@@ -164,7 +164,7 @@ You will get a dataset digest and a user question. Respond with ONLY a JSON obje
   "chart": { "metric": "<optional metric id>", "topN": <number 3-20> }
 }
 
-Query DSL (only include "query" when highlighting helps): free text matches node labels; filters: type:person|thread|concept|sop, from:<name>, to:<name>, with:<name>, concept:<term>, sop:<term>, min-degree:<n>, min-count:<n>. Quote multi-word values: from:"walt thomas".
+Query DSL (only include "query" when highlighting helps): free text matches node labels; filters: type:person|thread|concept|sop, from:<name>, to:<name>, with:<name>, concept:<term>, sop:<term>, text:<term> (full-text in message bodies), min-degree:<n>, min-count:<n>. Quote multi-word values: from:"walt thomas".
 
 Chart metric ids (only include "chart" when the question is quantitative): ${CHART_METRICS.map((m) => m.id).join(", ")}.
 

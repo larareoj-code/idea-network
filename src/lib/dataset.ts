@@ -4,9 +4,6 @@ import type { Dataset, Message, SourceInfo } from "./types";
 export const SCHEMA_VERSION = 1 as const;
 export const APP_VERSION = "v0.3";
 
-const STORAGE_KEY = "idea-network:dataset:v1";
-const STORAGE_LIMIT_BYTES = 4_500_000;
-
 export function buildDataset(messages: Message[], sources: SourceInfo[]): Dataset {
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -80,36 +77,4 @@ export function importDatasetJson(json: string): Dataset {
   }
   // Rebuild the graph so imports from older exports stay consistent.
   return buildDataset(data.messages, data.sources ?? []);
-}
-
-/** Persist to localStorage, silently skipping when over quota. */
-export function persistDataset(dataset: Dataset): void {
-  try {
-    const json = exportDatasetJson(dataset);
-    if (json.length > STORAGE_LIMIT_BYTES) {
-      localStorage.removeItem(STORAGE_KEY);
-      return;
-    }
-    localStorage.setItem(STORAGE_KEY, json);
-  } catch {
-    // Quota exceeded or storage unavailable — persistence is best-effort.
-  }
-}
-
-export function loadPersistedDataset(): Dataset | null {
-  try {
-    const json = localStorage.getItem(STORAGE_KEY);
-    if (!json) return null;
-    return importDatasetJson(json);
-  } catch {
-    return null;
-  }
-}
-
-export function clearPersistedDataset(): void {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // ignore
-  }
 }

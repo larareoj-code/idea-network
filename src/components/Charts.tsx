@@ -4,7 +4,12 @@ import { buildChart, CHART_METRICS, type ChartMetric, type ChartSpec } from "../
 
 export function Chart({ spec, onPick }: { spec: ChartSpec; onPick?: (nodeId: string) => void }) {
   if (spec.data.length === 0) {
-    return <div className="chart-empty">No data for this chart.</div>;
+    return (
+      <div className="chart">
+        <div className="chart-title">{spec.title}</div>
+        <div className="chart-empty">No data for this chart.</div>
+      </div>
+    );
   }
   return spec.kind === "donut" ? <Donut spec={spec} /> : <Bars spec={spec} onPick={onPick} />;
 }

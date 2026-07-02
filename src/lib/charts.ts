@@ -21,7 +21,8 @@ export type ChartMetric =
   | "biggest-threads"
   | "top-concepts"
   | "sop-mentions"
-  | "type-distribution";
+  | "type-distribution"
+  | "messages-over-time";
 
 export const CHART_METRICS: { id: ChartMetric; label: string; kind: "bar" | "donut" }[] = [
   { id: "top-senders", label: "Top senders", kind: "bar" },
@@ -31,6 +32,7 @@ export const CHART_METRICS: { id: ChartMetric; label: string; kind: "bar" | "don
   { id: "top-concepts", label: "Top concepts", kind: "bar" },
   { id: "sop-mentions", label: "SOP / data references", kind: "bar" },
   { id: "type-distribution", label: "Node type distribution", kind: "donut" },
+  { id: "messages-over-time", label: "Messages over time", kind: "bar" },
 ];
 
 const TYPE_COLORS: Record<string, string> = {
@@ -117,6 +119,37 @@ export function buildChart(dataset: Dataset, metric: ChartMetric, topN = 10): Ch
             .map((n) => ({ label: n.label, value: n.count, nodeId: n.id })),
         ),
       };
+    case "messages-over-time": {
+      // Chronological month buckets from exact dates (PST/MSG/EML sources).
+      // CSV exports carry no dates, so undated messages are counted separately.
+      const buckets = new Map<string, number>();
+      let undated = 0;
+      for (const m of dataset.messages) {
+        if (!m.date) {
+          undated += 1;
+          continue;
+        }
+        const d = new Date(m.date);
+        if (Number.isNaN(d.getTime())) {
+          undated += 1;
+          continue;
+        }
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        buckets.set(key, (buckets.get(key) ?? 0) + 1);
+      }
+      const data: ChartDatum[] = [...buckets.entries()]
+        .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+        .slice(-Math.max(topN, 12))
+        .map(([label, value]) => ({ label, value }));
+      return {
+        kind: "bar",
+        title:
+          undated > 0
+            ? `Messages over time (${undated} undated from CSV sources excluded)`
+            : "Messages over time",
+        data,
+      };
+    }
     case "type-distribution": {
       const counts: Record<string, number> = { person: 0, thread: 0, concept: 0, sop: 0 };
       for (const n of nodes) counts[n.type] += 1;

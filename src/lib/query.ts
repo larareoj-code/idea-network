@@ -116,6 +116,25 @@ export function runQuery(dataset: Dataset, input: string): Set<string> | null {
         }
         break;
       }
+      case "text":
+      case "body": {
+        // Full-text over message subject+body; hits map to their thread and sender.
+        const hitMsgIds = new Set<string>();
+        const hitSenderKeys = new Set<string>();
+        for (const m of dataset.messages) {
+          if (m.subject.toLowerCase().includes(f.value) || m.body.toLowerCase().includes(f.value)) {
+            hitMsgIds.add(m.id);
+            if (m.from) hitSenderKeys.add(m.from.key);
+          }
+        }
+        for (const n of nodes) {
+          if (n.type === "thread" && (n.meta as ThreadMeta).messageIds.some((id) => hitMsgIds.has(id))) {
+            ids.add(n.id);
+          }
+          if (n.type === "person" && hitSenderKeys.has(n.id.replace(/^person:/, ""))) ids.add(n.id);
+        }
+        break;
+      }
       case "concept":
       case "sop": {
         for (const n of nodes) {
@@ -162,6 +181,7 @@ export const QUERY_HELP = [
   ["to:larareo", "recipient + threads to them"],
   ["with:thomas", "threads a person is in"],
   ["concept:phase", "concept + related threads"],
+  ['text:"hyd flush"', "full-text in message bodies"],
   ["sop:dsr", "SOP/data refs + threads"],
   ["min-degree:5", "well-connected nodes"],
   ['"exact phrase"', "quoted free text"],

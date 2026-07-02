@@ -2,14 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Dataset, GraphData, GraphNode, Message, NodeType } from "./lib/types";
 import { parseOutlookCsv } from "./lib/parseOutlookCsv";
 import { parseFile } from "./lib/ingest";
-import {
-  clearPersistedDataset,
-  exportDatasetJson,
-  importDatasetJson,
-  loadPersistedDataset,
-  mergeDataset,
-  persistDataset,
-} from "./lib/dataset";
+import { exportDatasetJson, importDatasetJson, mergeDataset } from "./lib/dataset";
+import { clearDataset, loadDataset, saveDataset } from "./lib/storage";
 import { runQuery } from "./lib/query";
 import GraphView from "./components/GraphView";
 import Sidebar, { ALL_TYPES } from "./components/Sidebar";
@@ -31,7 +25,8 @@ const linkEndId = (v: unknown): string =>
   typeof v === "object" && v !== null ? (v as { id: string }).id : (v as string);
 
 export default function App() {
-  const [dataset, setDataset] = useState<Dataset | null>(() => loadPersistedDataset());
+  const [dataset, setDataset] = useState<Dataset | null>(null);
+  const [booting, setBooting] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -44,7 +39,19 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   useEffect(() => {
-    if (dataset) persistDataset(dataset);
+    let cancelled = false;
+    void loadDataset().then((d) => {
+      if (cancelled) return;
+      if (d) setDataset(d);
+      setBooting(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (dataset) void saveDataset(dataset);
   }, [dataset]);
 
   useEffect(() => {
@@ -145,7 +152,7 @@ export default function App() {
   );
 
   const onClear = useCallback(() => {
-    clearPersistedDataset();
+    void clearDataset();
     applyDataset(null);
   }, [applyDataset]);
 
@@ -264,7 +271,7 @@ export default function App() {
         hasData={!!dataset}
       />
       <main className="main">
-        {!dataset || !visibleGraph ? (
+        {booting ? null : !dataset || !visibleGraph ? (
           <EmptyState onFiles={onFiles} onLoadSamples={onLoadSamples} loading={loading} error={error} />
         ) : (
           <DropOverlay onFiles={onFiles}>

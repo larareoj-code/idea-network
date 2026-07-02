@@ -55,6 +55,18 @@ describe("query DSL", () => {
     for (const id of narrowed) expect(all.has(id)).toBe(true);
   });
 
+  it("text: searches message bodies and maps to threads and senders", () => {
+    const withBody = dataset.messages.find((m) => m.body.length > 40 && m.from)!;
+    const phrase = withBody.body
+      .split(/\s+/)
+      .find((w) => w.length >= 6 && /^[a-z]+$/i.test(w))!;
+    const ids = runQuery(dataset, `text:${phrase.toLowerCase()}`)!;
+    expect(ids.size).toBeGreaterThan(0);
+    const byId = new Map(dataset.graph.nodes.map((n) => [n.id, n]));
+    const types = new Set([...ids].map((id) => byId.get(id)!.type));
+    expect(types.has("thread")).toBe(true);
+  });
+
   it("returns an empty set (not null) for a query with no hits", () => {
     const ids = runQuery(dataset, "zzz-no-such-node-zzz");
     expect(ids).not.toBeNull();
@@ -67,9 +79,28 @@ describe("charts", () => {
     for (const m of CHART_METRICS) {
       const spec = buildChart(dataset, m.id, 5);
       expect(spec.title.length).toBeGreaterThan(0);
-      expect(spec.data.length).toBeLessThanOrEqual(m.id === "type-distribution" ? 4 : 5);
+      const cap = m.id === "type-distribution" ? 4 : m.id === "messages-over-time" ? 12 : 5;
+      expect(spec.data.length).toBeLessThanOrEqual(cap);
       for (const d of spec.data) expect(d.value).toBeGreaterThanOrEqual(0);
     }
+  });
+
+  it("messages-over-time buckets dated messages chronologically", () => {
+    const dated = dataset.messages.map((m, i) => ({
+      ...m,
+      date: new Date(Date.UTC(2026, i % 3, 15)).toISOString(),
+    }));
+    const ds = { ...dataset, messages: dated };
+    const spec = buildChart(ds, "messages-over-time", 12);
+    expect(spec.data.map((d) => d.label)).toEqual(["2026-01", "2026-02", "2026-03"]);
+    expect(spec.data.reduce((s, d) => s + d.value, 0)).toBe(dated.length);
+    expect(spec.title).not.toContain("undated");
+  });
+
+  it("messages-over-time notes undated CSV messages", () => {
+    const spec = buildChart(dataset, "messages-over-time", 12);
+    expect(spec.data.length).toBe(0);
+    expect(spec.title).toContain("undated");
   });
 
   it("top-senders is sorted descending with node ids", () => {
