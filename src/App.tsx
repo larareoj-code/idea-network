@@ -6,7 +6,8 @@ import { exportDatasetJson, importDatasetJson, mergeDataset } from "./lib/datase
 import { clearDataset, loadDataset, saveDataset } from "./lib/storage";
 import { runQuery } from "./lib/query";
 import GraphView from "./components/GraphView";
-import Sidebar, { ALL_TYPES } from "./components/Sidebar";
+import Sidebar, { ALL_TYPES, type ViewState } from "./components/Sidebar";
+import type { SavedView } from "./lib/savedViews";
 import DetailPanel from "./components/DetailPanel";
 import StatsBar from "./components/StatsBar";
 import { DropOverlay, EmptyState } from "./components/UploadZone";
@@ -243,6 +244,18 @@ export default function App() {
     setSearch(q);
   }, []);
 
+  const currentViewState = useMemo<ViewState>(
+    () => ({ search, enabledTypes: [...enabledTypes], showPersonLinks, hideNonMatching }),
+    [search, enabledTypes, showPersonLinks, hideNonMatching],
+  );
+
+  const onApplyView = useCallback((v: SavedView) => {
+    setSearch(v.search);
+    setEnabledTypes(new Set(v.enabledTypes));
+    setShowPersonLinks(v.showPersonLinks);
+    setHideNonMatching(v.hideNonMatching);
+  }, []);
+
   const paletteActions = useMemo<PaletteAction[]>(
     () => [
       { id: "charts", label: "Open charts", hint: "panel", run: () => setPanel("charts") },
@@ -280,6 +293,8 @@ export default function App() {
         onImport={onImport}
         onClear={onClear}
         hasData={!!dataset}
+        currentViewState={currentViewState}
+        onApplyView={onApplyView}
       />
       <main className="main">
         {booting ? null : !dataset || !visibleGraph ? (
