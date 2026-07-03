@@ -67,6 +67,52 @@ describe("query DSL", () => {
     expect(types.has("thread")).toBe(true);
   });
 
+  it("source: matches nodes whose messages came from a file", () => {
+    const ids = runQuery(dataset, "source:inbox")!;
+    expect(ids.size).toBeGreaterThan(0);
+    const byId = new Map(dataset.graph.nodes.map((n) => [n.id, n]));
+    for (const id of ids) {
+      const meta = byId.get(id)!.meta as { messageIds?: string[] };
+      expect((meta.messageIds ?? []).length).toBeGreaterThan(0);
+    }
+    expect(runQuery(dataset, "source:no-such-file.csv")!.size).toBe(0);
+  });
+
+  it("via: matches nodes touching a link of the given type", () => {
+    const ids = runQuery(dataset, "via:participated")!;
+    expect(ids.size).toBeGreaterThan(0);
+    const touched = new Set<string>();
+    for (const l of dataset.graph.links) {
+      if (l.type !== "participated") continue;
+      touched.add(l.source as string);
+      touched.add(l.target as string);
+    }
+    expect(ids).toEqual(touched);
+  });
+
+  it("after:/before: filter dated messages and map to threads/senders", () => {
+    const dated = dataset.messages.map((m, i) => ({
+      ...m,
+      date: new Date(Date.UTC(2026, i % 2, 15)).toISOString(),
+    }));
+    const ds = { ...dataset, messages: dated };
+    const afterIds = runQuery(ds, "after:2026-02-01")!;
+    expect(afterIds.size).toBeGreaterThan(0);
+    const beforeIds = runQuery(ds, "before:2026-02-01")!;
+    expect(beforeIds.size).toBeGreaterThan(0);
+    const all = runQuery(ds, "after:2020-01-01")!;
+    expect(afterIds.size).toBeLessThanOrEqual(all.size);
+  });
+
+  it("after:/before: match nothing on undated CSV datasets", () => {
+    expect(runQuery(dataset, "after:2020-01-01")!.size).toBe(0);
+    expect(runQuery(dataset, "before:2030-01-01")!.size).toBe(0);
+  });
+
+  it("after: with garbage date matches nothing rather than erroring", () => {
+    expect(runQuery(dataset, "after:notadate")!.size).toBe(0);
+  });
+
   it("returns an empty set (not null) for a query with no hits", () => {
     const ids = runQuery(dataset, "zzz-no-such-node-zzz");
     expect(ids).not.toBeNull();
