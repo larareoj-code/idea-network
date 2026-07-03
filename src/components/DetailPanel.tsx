@@ -194,15 +194,32 @@ export default function DetailPanel({
     );
   };
 
+  // Per-source message counts and date ranges for the lineage section
+  const sourceLineage = useMemo(() => {
+    return sourceFiles.map((name) => {
+      const msgs = nodeMessages.filter((m) => m.source === name);
+      const range = seenRange(msgs);
+      return { name, count: msgs.length, range };
+    });
+  }, [sourceFiles, nodeMessages]);
+
   const sourcesSection =
     sourceFiles.length > 0 ? (
       <div className="detail-section">
         <div className="section-label">Source files</div>
-        <ul className="item-list">
-          {sourceFiles.map((s) => (
-            <li key={s} style={{ overflowWrap: "anywhere" }}>{s}</li>
+        <div className="kv-grid">
+          {sourceLineage.map(({ name, count, range }) => (
+            <div key={name} className="source-lineage-row">
+              <span className="source-lineage-name" title={name}>{name}</span>
+              <span className="meta">{count} msg{count === 1 ? "" : "s"}</span>
+              {range ? (
+                <span className="approx source-lineage-range">{range.first}{range.first !== range.last ? ` → ${range.last}` : ""}</span>
+              ) : (
+                <span className="approx source-lineage-range">no dates</span>
+              )}
+            </div>
           ))}
-        </ul>
+        </div>
       </div>
     ) : null;
 
