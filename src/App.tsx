@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dataset, GraphData, GraphNode, LinkType, Message, NodeType } from "./lib/types";
+import { APP_VERSION } from "./lib/dataset";
+import { getStoredTheme, toggleTheme } from "./lib/theme";
 import { parseOutlookCsv } from "./lib/parseOutlookCsv";
 import { parseFiles, type ParseProgress } from "./lib/ingest";
 import { exportDatasetJson, importDatasetJson, mergeDataset } from "./lib/dataset";
@@ -17,7 +19,7 @@ import Sidebar, { ALL_TYPES, type ViewState } from "./components/Sidebar";
 import type { SavedView } from "./lib/savedViews";
 import DetailPanel from "./components/DetailPanel";
 import StatsBar from "./components/StatsBar";
-import { DropOverlay, EmptyState } from "./components/UploadZone";
+import { DropOverlay, FirstRunScreen } from "./components/UploadZone";
 import { ChartsPanel } from "./components/Charts";
 import AskPanel from "./components/AskPanel";
 import CommandPalette, { type PaletteAction } from "./components/CommandPalette";
@@ -66,6 +68,9 @@ export default function App() {
   const [enabledLinkTypes, setEnabledLinkTypes] = useState<Set<Exclude<LinkType, "cooccurs">>>(
     new Set(["participated", "mentions", "references"]),
   );
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [hasSaved, setHasSaved] = useState(false);
+  const [theme, setThemeState] = useState(getStoredTheme);
   const graphApi = useRef<GraphViewHandle | null>(null);
 
   useEffect(() => setAdhocHighlight(null), [search]);
@@ -81,7 +86,10 @@ export default function App() {
     void loadDataset().then((d) => {
       if (cancelled) return;
       // Never clobber data the user uploaded while the load was in flight.
-      if (d) setDataset((prev) => prev ?? d);
+      if (d) {
+        setDataset((prev) => prev ?? d);
+        setHasSaved(true);
+      }
       setBooting(false);
     });
     return () => {
@@ -557,7 +565,41 @@ export default function App() {
   );
 
   return (
-    <div className="app">
+    <div className={`app ${sidebarOpen ? "sidebar-open" : "sidebar-closed"}`}>
+      <div className="topbar">
+        <button
+          className="topbar-sidebar-toggle btn-icon"
+          onClick={() => setSidebarOpen((v) => !v)}
+          aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+          title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+        >
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+            <line x1="3" y1="5" x2="17" y2="5"/>
+            <line x1="3" y1="10" x2="17" y2="10"/>
+            <line x1="3" y1="15" x2="17" y2="15"/>
+          </svg>
+        </button>
+        <span className="topbar-brand">Idea Network</span>
+        <span className="badge topbar-version">{APP_VERSION}</span>
+        <button
+          className="theme-toggle topbar-theme"
+          onClick={() => setThemeState(toggleTheme())}
+          title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+        >
+          {theme === "dark" ? "☀" : "☾"}
+        </button>
+        <button
+          className="topbar-cmd btn-icon"
+          onClick={() => setPaletteOpen(true)}
+          title="Command palette (Ctrl+K)"
+          aria-label="Open command palette"
+        >
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="2" y="2" width="16" height="16" rx="3"/>
+            <path d="M6 8l-2 2 2 2M14 8l2 2-2 2M11 6l-2 8"/>
+          </svg>
+        </button>
+      </div>
       <Sidebar
         graph={dataset?.graph ?? null}
         search={search}
@@ -577,8 +619,33 @@ export default function App() {
         onApplyView={onApplyView}
       />
       <main className="main">
-        {booting ? null : !dataset || !visibleGraph ? (
-          <EmptyState onFiles={onFiles} onLoadSamples={onLoadSamples} loading={loading} error={error} progress={parseProgress} />
+        {booting ? (
+          <div className="loading-screen">
+            <div className="spinner" aria-label="Loading…" />
+          </div>
+        ) : !dataset ? (
+          <FirstRunScreen
+            onFiles={onFiles}
+            onLoadSamples={onLoadSamples}
+            onReopenSaved={() => {
+              void loadDataset().then((d) => { if (d) setDataset(d); });
+            }}
+            hasSaved={hasSaved}
+          />
+        ) : !visibleGraph ? (
+          <div className="cleared-empty">
+            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true" className="cleared-empty-icon">
+              <circle cx="24" cy="24" r="10" opacity="0.4"/>
+              <circle cx="10" cy="14" r="4" opacity="0.3"/>
+              <circle cx="38" cy="14" r="4" opacity="0.3"/>
+              <circle cx="10" cy="34" r="4" opacity="0.3"/>
+              <circle cx="38" cy="34" r="4" opacity="0.3"/>
+            </svg>
+            <p className="cleared-empty-text">No graph loaded — drop files or load the demo.</p>
+            <div className="btn-row" style={{ justifyContent: "center" }}>
+              <button className="btn primary" onClick={onLoadSamples} disabled={loading}>Load demo</button>
+            </div>
+          </div>
         ) : (
           <DropOverlay onFiles={onFiles}>
             <GraphView
@@ -671,6 +738,21 @@ export default function App() {
               )}
             </div>
           </DropOverlay>
+        )}
+        {loading && parseProgress && (
+          <div className="parse-progress-overlay">
+            <div className="parse-progress-box">
+              <div className="parse-progress-label">
+                Parsing {parseProgress.index + 1} of {parseProgress.total}: {parseProgress.name}
+              </div>
+              <div className="parse-progress-track">
+                <div
+                  className="parse-progress-fill"
+                  style={{ width: `${Math.round(((parseProgress.index + 1) / parseProgress.total) * 100)}%` }}
+                />
+              </div>
+            </div>
+          </div>
         )}
         {dataset && error && (
           <div className="graph-hint" style={{ color: "var(--danger)", top: 44 }}>{error}</div>
