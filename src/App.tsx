@@ -14,6 +14,8 @@ import { DropOverlay, EmptyState } from "./components/UploadZone";
 import { ChartsPanel } from "./components/Charts";
 import AskPanel from "./components/AskPanel";
 import CommandPalette, { type PaletteAction } from "./components/CommandPalette";
+import GraphSearch from "./components/GraphSearch";
+import GraphFilters, { nonLargestComponentIds } from "./components/GraphFilters";
 
 const SAMPLES = [
   { url: "samples/inbox.csv", name: "inbox.csv" },
@@ -39,6 +41,21 @@ export default function App() {
   const [isolatedId, setIsolatedId] = useState<string | null>(null);
   const [panel, setPanel] = useState<Panel>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [neighborhoodOnly, setNeighborhoodOnly] = useState(false);
+  const [highDegreeOnly, setHighDegreeOnly] = useState(false);
+  const [degreeThreshold, setDegreeThreshold] = useState(5);
+  const [isolatedClusters, setIsolatedClusters] = useState(false);
+  const [hideLowConnection, setHideLowConnection] = useState(false);
+  const [adhocHighlight, setAdhocHighlight] = useState<Set<string> | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => setAdhocHighlight(null), [search]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const t = window.setTimeout(() => setNotice(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [notice]);
 
   useEffect(() => {
     let cancelled = false;
@@ -191,11 +208,52 @@ export default function App() {
       nodeIds = new Set(nodes.map((n) => n.id));
       links = links.filter((l) => nodeIds.has(linkEndId(l.source)) && nodeIds.has(linkEndId(l.target)));
     }
+    const prune = () => {
+      nodeIds = new Set(nodes.map((n) => n.id));
+      links = links.filter((l) => nodeIds.has(linkEndId(l.source)) && nodeIds.has(linkEndId(l.target)));
+    };
+    if (neighborhoodOnly && selectedId && nodeIds.has(selectedId)) {
+      const keep = new Set<string>([selectedId]);
+      for (const l of links) {
+        const s = linkEndId(l.source);
+        const t = linkEndId(l.target);
+        if (s === selectedId) keep.add(t);
+        if (t === selectedId) keep.add(s);
+      }
+      nodes = nodes.filter((n) => keep.has(n.id));
+      prune();
+    }
+    if (highDegreeOnly) {
+      nodes = nodes.filter((n) => n.degree >= degreeThreshold);
+      prune();
+    }
+    if (hideLowConnection) {
+      nodes = nodes.filter((n) => n.degree > 1);
+      prune();
+    }
+    if (isolatedClusters) {
+      const keep = nonLargestComponentIds(nodes, links);
+      nodes = nodes.filter((n) => keep.has(n.id));
+      prune();
+    }
     return { nodes, links };
-  }, [dataset, enabledTypes, showPersonLinks, isolatedId, hideNonMatching, matchIds]);
+  }, [
+    dataset,
+    enabledTypes,
+    showPersonLinks,
+    isolatedId,
+    hideNonMatching,
+    matchIds,
+    neighborhoodOnly,
+    selectedId,
+    highDegreeOnly,
+    degreeThreshold,
+    hideLowConnection,
+    isolatedClusters,
+  ]);
 
   // When hiding non-matches the graph is already filtered — no need to dim.
-  const highlightIds = hideNonMatching ? null : matchIds;
+  const highlightIds = adhocHighlight ?? (hideNonMatching ? null : matchIds);
 
   const selectedNode = useMemo<GraphNode | null>(
     () => dataset?.graph.nodes.find((n) => n.id === selectedId) ?? null,
@@ -238,6 +296,37 @@ export default function App() {
     setSearch(q);
   }, []);
 
+  const matchList = useMemo<string[]>(() => {
+    if (!dataset || matchIds === null) return [];
+    return dataset.graph.nodes.filter((n) => matchIds.has(n.id)).map((n) => n.id);
+  }, [dataset, matchIds]);
+
+  const searchResultIndex = selectedId ? matchList.indexOf(selectedId) : -1;
+
+  const stepMatch = useCallback(
+    (dir: 1 | -1) => {
+      if (matchList.length === 0) return;
+      const next =
+        searchResultIndex >= 0
+          ? (searchResultIndex + dir + matchList.length) % matchList.length
+          : dir === 1
+            ? 0
+            : matchList.length - 1;
+      onPickNode(matchList[next]);
+    },
+    [matchList, searchResultIndex, onPickNode],
+  );
+
+  const onHideSelectedType = useCallback(() => {
+    const t = dataset?.graph.nodes.find((n) => n.id === selectedId)?.type;
+    if (!t) return;
+    setEnabledTypes((prev) => {
+      const next = new Set(prev);
+      next.delete(t);
+      return next;
+    });
+  }, [dataset, selectedId]);
+
   const currentViewState = useMemo<ViewState>(
     () => ({ search, enabledTypes: [...enabledTypes], showPersonLinks, hideNonMatching }),
     [search, enabledTypes, showPersonLinks, hideNonMatching],
@@ -264,10 +353,99 @@ export default function App() {
           setIsolatedId(null);
           setPanel(null);
           setEnabledTypes(new Set(ALL_TYPES));
+          setNeighborhoodOnly(false);
+          setHighDegreeOnly(false);
+          setIsolatedClusters(false);
+          setHideLowConnection(false);
+          setAdhocHighlight(null);
+        },
+      },
+      {
+        id: "only-concepts",
+        label: "Show only concepts",
+        hint: "filter",
+        run: () => setEnabledTypes(new Set<NodeType>(["concept"])),
+      },
+      {
+        id: "hide-people",
+        label: "Hide people",
+        hint: "filter",
+        run: () =>
+          setEnabledTypes((prev) => {
+            const next = new Set(prev);
+            next.delete("person");
+            return next;
+          }),
+      },
+      {
+        id: "focus-cluster",
+        label: "Focus selected cluster",
+        hint: "filter",
+        run: () => {
+          if (!selectedId) setNotice("Select a node first, then run this to focus its neighborhood.");
+          setNeighborhoodOnly(true);
+        },
+      },
+      {
+        id: "export-visible",
+        label: "Export visible graph",
+        hint: "file",
+        run: () => {
+          if (!visibleGraph) return;
+          const blob = new Blob(
+            [JSON.stringify({ nodes: visibleGraph.nodes, links: visibleGraph.links }, null, 2)],
+            { type: "application/json" },
+          );
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "idea-network-visible-graph.json";
+          a.click();
+          URL.revokeObjectURL(url);
+        },
+      },
+      {
+        id: "save-view",
+        label: "Save current view",
+        run: () => setNotice("Use the Views section in the sidebar — it saves the current search and filters."),
+      },
+      {
+        id: "find-orphans",
+        label: "Find orphan nodes",
+        run: () => {
+          const orphans = new Set(
+            (dataset?.graph.nodes ?? []).filter((n) => n.degree === 0).map((n) => n.id),
+          );
+          if (orphans.size === 0) {
+            setNotice("No orphan nodes — everything is connected.");
+            setAdhocHighlight(null);
+          } else {
+            setNotice(`${orphans.size} orphan node${orphans.size === 1 ? "" : "s"} highlighted.`);
+            setAdhocHighlight(orphans);
+          }
+        },
+      },
+      {
+        id: "strongest-links",
+        label: "Show strongest connections",
+        run: () => {
+          if (!visibleGraph) return;
+          const top = [...visibleGraph.links].sort((a, b) => b.weight - a.weight).slice(0, 10);
+          const ids = new Set<string>();
+          for (const l of top) {
+            ids.add(linkEndId(l.source));
+            ids.add(linkEndId(l.target));
+          }
+          if (ids.size === 0) {
+            setNotice("No links in the visible graph.");
+          } else {
+            setNotice(`Top ${top.length} links by weight highlighted.`);
+            setAdhocHighlight(ids);
+          }
         },
       },
     ],
-    [onExport],
+    [onExport, dataset, visibleGraph, selectedId],
   );
 
   return (
@@ -304,6 +482,28 @@ export default function App() {
             />
             {isolatedId && <div className="graph-hint">Isolated neighborhood — click background or double-click again to reset</div>}
             <StatsBar dataset={dataset} visibleNodes={visibleGraph.nodes.length} visibleLinks={visibleGraph.links.length} />
+            <GraphSearch
+              query={search}
+              matchCount={matchList.length}
+              position={searchResultIndex >= 0 ? searchResultIndex : null}
+              onPrev={() => stepMatch(-1)}
+              onNext={() => stepMatch(1)}
+            />
+            <GraphFilters
+              neighborhoodOnly={neighborhoodOnly}
+              onToggleNeighborhood={() => setNeighborhoodOnly((v) => !v)}
+              highDegreeOnly={highDegreeOnly}
+              onToggleHighDegree={() => setHighDegreeOnly((v) => !v)}
+              degreeThreshold={degreeThreshold}
+              onDegreeThreshold={setDegreeThreshold}
+              isolatedClusters={isolatedClusters}
+              onToggleIsolatedClusters={() => setIsolatedClusters((v) => !v)}
+              hideLowConnection={hideLowConnection}
+              onToggleHideLowConnection={() => setHideLowConnection((v) => !v)}
+              selectedType={selectedNode?.type ?? null}
+              onHideSelectedType={onHideSelectedType}
+            />
+            {notice && <div className="graph-hint graph-notice">{notice}</div>}
 
             <div className="dock">
               <button

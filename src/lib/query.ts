@@ -15,6 +15,9 @@ import type { Dataset, GraphNode, NodeType, PersonMeta, ThreadMeta } from "./typ
  *   concept:<term>   concept nodes + threads mentioning them
  *   sop:<term>       SOP/data nodes + their threads
  *   community:<id>   people/threads in a detected community (c1, 1, …)
+ *   source:<file>    nodes whose messages came from an uploaded file
+ *   via:<linktype>   nodes touching a link of that type
+ *   after:<date>     threads/senders with messages on/after date (before: too)
  *   min-degree:<n>   nodes with degree >= n
  *   min-count:<n>    nodes with count >= n
  */
@@ -156,6 +159,50 @@ export function runQuery(dataset: Dataset, input: string): Set<string> | null {
         }
         break;
       }
+      case "source": {
+        const hitMsgIds = new Set<string>();
+        for (const m of dataset.messages) {
+          if (m.source.toLowerCase().includes(f.value)) hitMsgIds.add(m.id);
+        }
+        for (const n of nodes) {
+          const meta = n.meta as { messageIds?: string[] };
+          if ((meta.messageIds ?? []).some((mid) => hitMsgIds.has(mid))) ids.add(n.id);
+        }
+        break;
+      }
+      case "via": {
+        const endId = (v: unknown): string =>
+          typeof v === "object" && v !== null ? (v as { id: string }).id : (v as string);
+        for (const l of dataset.graph.links) {
+          if (!l.type.startsWith(f.value)) continue;
+          ids.add(endId(l.source));
+          ids.add(endId(l.target));
+        }
+        break;
+      }
+      case "after":
+      case "before": {
+        const bound = Date.parse(f.value);
+        if (!Number.isFinite(bound)) break;
+        const hitMsgIds = new Set<string>();
+        const hitSenderKeys = new Set<string>();
+        for (const m of dataset.messages) {
+          if (!m.date) continue;
+          const t = Date.parse(m.date);
+          if (!Number.isFinite(t)) continue;
+          if (f.field === "after" ? t >= bound : t <= bound) {
+            hitMsgIds.add(m.id);
+            if (m.from) hitSenderKeys.add(m.from.key);
+          }
+        }
+        for (const n of nodes) {
+          if (n.type === "thread" && (n.meta as ThreadMeta).messageIds.some((id) => hitMsgIds.has(id))) {
+            ids.add(n.id);
+          }
+          if (n.type === "person" && hitSenderKeys.has(n.id.replace(/^person:/, ""))) ids.add(n.id);
+        }
+        break;
+      }
       case "min-degree":
       case "mindegree": {
         const n = Number(f.value);
@@ -194,6 +241,9 @@ export const QUERY_HELP = [
   ['text:"hyd flush"', "full-text in message bodies"],
   ["sop:dsr", "SOP/data refs + threads"],
   ["community:1", "people/threads in community 1"],
+  ["source:inbox.csv", "nodes from an uploaded file"],
+  ["via:mentions", "nodes on a link type"],
+  ["after:2026-01-01", "dated messages on/after (before: too)"],
   ["min-degree:5", "well-connected nodes"],
   ['"exact phrase"', "quoted free text"],
 ] as const;
