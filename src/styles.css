@@ -1873,3 +1873,144 @@ kbd {
   color: var(--text-faint);
   font-size: 11px;
 }
+
+/* ---- Graph mode bar ---- */
+
+.graph-mode-grid {
+  display: grid;
+  gap: 4px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.graph-mode-btn {
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 5px 6px;
+  text-align: left;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.graph-mode-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.graph-mode-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: 600;
+}
+
+.graph-mode-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.graph-mode-reset {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  float: right;
+  font-size: 14px;
+  line-height: 1;
+  margin-left: auto;
+  padding: 0 2px;
+}
+
+.graph-mode-reset:hover {
+  color: var(--text);
+}
+
+/* ---- Multi-select action bar ---- */
+
+.multiselect-bar {
+  align-items: center;
+  background: var(--bg-panel);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  bottom: 56px;
+  display: flex;
+  font-size: 12px;
+  gap: 6px;
+  left: 50%;
+  padding: 6px 10px;
+  position: absolute;
+  transform: translateX(-50%);
+  z-index: 40;
+}
+
+.multiselect-bar span {
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.multiselect-bar button {
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+.multiselect-bar button:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+/* ---- Rich node tooltip ---- */
+
+.node-tooltip {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  font-family: var(--font);
+  font-size: 12px;
+  max-width: 220px;
+  padding: 8px 10px;
+}
+
+.tt-header {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.tt-label {
+  color: var(--text);
+  flex: 1;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tt-badge {
+  border-radius: 4px;
+  color: #0b0e14;
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  text-transform: uppercase;
+}
+
+.tt-row {
+  color: var(--text-dim);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.tt-row b {
+  color: var(--text);
+}

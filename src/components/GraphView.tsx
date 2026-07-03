@@ -109,7 +109,7 @@ const GraphView = forwardRef<GraphViewHandle, Props>(function GraphView(
   const hoverRef = useRef<RuntimeNode | null>(null);
   const lastClickRef = useRef<{ id: string; time: number }>({ id: "", time: 0 });
   const focusRef = useRef<string | null>(null);
-  const [menu, setMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; nodeId: string; nodeLabel: string } | null>(null);
 
   // Interaction state lives in refs so canvas callbacks always see fresh values
   // without re-creating the graph instance.
@@ -222,7 +222,20 @@ const GraphView = forwardRef<GraphViewHandle, Props>(function GraphView(
       .backgroundColor("rgba(0,0,0,0)")
       .nodeId("id")
       .nodeVal((n) => 2 + Math.sqrt(n.degree + 1) * 1.6)
-      .nodeLabel((n) => `${n.fullLabel ?? n.label} (${n.type})`)
+      .nodeLabel((n) => {
+        const color = NODE_COLORS[n.type];
+        let extra = "";
+        if (n.meta.kind === "person") {
+          extra = `<div class="tt-row">Sent <b>${n.meta.sentCount}</b> · Received <b>${n.meta.receivedCount}</b></div>`;
+        } else if (n.meta.kind === "thread") {
+          extra = `<div class="tt-row">Messages <b>${n.meta.messageIds.length}</b> · Participants <b>${n.meta.participantKeys.length}</b></div>`;
+        } else if (n.meta.kind === "concept") {
+          extra = `<div class="tt-row">Appears in <b>${n.meta.threadIds.length}</b> thread${n.meta.threadIds.length === 1 ? "" : "s"}</div>`;
+        } else if (n.meta.kind === "sop") {
+          extra = `<div class="tt-row">Referenced in <b>${n.meta.threadIds.length}</b> thread${n.meta.threadIds.length === 1 ? "" : "s"}</div>`;
+        }
+        return `<div class="node-tooltip"><div class="tt-header"><span class="tt-label">${n.fullLabel ?? n.label}</span><span class="tt-badge" style="background:${color}">${n.type}</span></div><div class="tt-row">Connections <b>${n.degree}</b></div>${extra}</div>`;
+      })
       .linkVisibility(() => stateRef.current.density.showEdges)
       .linkColor((l) => {
         const { selectedId: sel, density: d } = stateRef.current;
@@ -350,7 +363,11 @@ const GraphView = forwardRef<GraphViewHandle, Props>(function GraphView(
         const last = lastClickRef.current;
         lastClickRef.current = { id: node.id, time: now };
         if (last.id === node.id && now - last.time < 350) {
-          onIsolate(node.id);
+          if (stateRef.current.pinnedIds.has(node.id)) {
+            onPin(node.id);
+          } else {
+            onIsolate(node.id);
+          }
         } else {
           onSelect(node.id);
         }
@@ -358,7 +375,7 @@ const GraphView = forwardRef<GraphViewHandle, Props>(function GraphView(
       .onNodeRightClick((node, event) => {
         event.preventDefault();
         const rect = el.getBoundingClientRect();
-        setMenu({ x: event.clientX - rect.left, y: event.clientY - rect.top, nodeId: node.id });
+        setMenu({ x: event.clientX - rect.left, y: event.clientY - rect.top, nodeId: node.id, nodeLabel: node.fullLabel ?? node.label });
       })
       .onNodeDragEnd((node) => {
         // force-graph releases fx/fy on drag end (verified in source) —
@@ -538,11 +555,19 @@ const GraphView = forwardRef<GraphViewHandle, Props>(function GraphView(
         >
           <button
             onClick={() => {
+              onSelect(menu.nodeId);
+              setMenu(null);
+            }}
+          >
+            Select
+          </button>
+          <button
+            onClick={() => {
               onIsolate(menu.nodeId);
               setMenu(null);
             }}
           >
-            Isolate
+            Isolate neighborhood
           </button>
           <button
             onClick={() => {
@@ -558,7 +583,7 @@ const GraphView = forwardRef<GraphViewHandle, Props>(function GraphView(
               setMenu(null);
             }}
           >
-            Hide
+            Hide node
           </button>
           <button
             onClick={() => {
@@ -567,6 +592,14 @@ const GraphView = forwardRef<GraphViewHandle, Props>(function GraphView(
             }}
           >
             Expand neighbors
+          </button>
+          <button
+            onClick={() => {
+              void navigator.clipboard.writeText(menu.nodeLabel);
+              setMenu(null);
+            }}
+          >
+            Copy label
           </button>
         </div>
       )}
