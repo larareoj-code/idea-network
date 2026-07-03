@@ -2014,3 +2014,153 @@ kbd {
 .tt-row b {
   color: var(--text);
 }
+
+/* ── Provider Setup Cards ───────────────────────────────────────────────── */
+
+.provider-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.provider-card {
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+
+.provider-card-active {
+  border-color: var(--accent);
+}
+
+.provider-card-header {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  justify-content: space-between;
+}
+
+.provider-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.provider-badge {
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  text-transform: uppercase;
+}
+
+.badge-free {
+  background: #166534;
+  color: #bbf7d0;
+}
+
+.badge-local {
+  background: #1e3a5f;
+  color: #bae6fd;
+}
+
+.provider-desc {
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* ── Provider status chip ───────────────────────────────────────────────── */
+
+.provider-status-chip {
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  padding: 1px 6px;
+}
+
+/* ── Ask mode bar ───────────────────────────────────────────────────────── */
+
+.ask-mode-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 0;
+}
+
+.btn.active {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+/* ── Privacy banner ─────────────────────────────────────────────────────── */
+
+.privacy-banner {
+  background: #422006;
+  border: 1px solid #92400e;
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 12px;
+}
+
+.privacy-text {
+  color: #fef3c7;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.privacy-checkbox {
+  align-items: center;
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  font-size: 12px;
+  gap: 6px;
+}
+
+/* ── Citations ──────────────────────────────────────────────────────────── */
+
+.citations {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.citations-label {
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.citation-chip {
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 12px;
+  overflow: hidden;
+  padding: 5px 10px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.citation-chip:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.citation-from {
+  color: var(--text-faint);
+}

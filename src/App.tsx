@@ -811,7 +811,7 @@ export default function App() {
             </div>
             <div className={`detail ${panel === "ask" ? "open" : ""}`}>
               {panel === "ask" && (
-                <AskPanel dataset={dataset} onApplyQuery={onApplyQuery} onPick={onPickNode} onClose={() => setPanel(null)} />
+                <AskPanel dataset={dataset} onApplyQuery={onApplyQuery} onPick={onPickNode} onClose={() => setPanel(null)} visibleNodes={visibleGraph?.nodes} visibleLinks={visibleGraph?.links} />
               )}
             </div>
           </DropOverlay>

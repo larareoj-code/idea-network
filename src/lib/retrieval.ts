@@ -1,10 +1,18 @@
-import type { Dataset, Message } from "./types";
+import type { Dataset, Message, ThreadMeta } from "./types";
 
 /**
  * Fully local keyword retrieval over message bodies. Nothing here touches the
  * network — results are only ever embedded into the prompt sent to the user's
  * own configured LLM endpoint.
  */
+
+export interface Citation {
+  index: number;       // 1-based citation number in the text
+  threadId: string;    // graph node id for the thread (thread:subject-hash)
+  subject: string;
+  from: string;
+  snippet: string;     // first 120 chars of body
+}
 
 const STOPWORDS = new Set(
   (
@@ -102,4 +110,46 @@ export function formatExcerpts(excerpts: RetrievedExcerpt[]): string {
     size += line.length;
   }
   return lines.join("\n");
+}
+
+/**
+ * Like formatExcerpts but tags each excerpt with [N] so the LLM can cite them,
+ * and returns the resolved Citation objects alongside the text block.
+ */
+export function formatExcerptsWithCitations(
+  excerpts: RetrievedExcerpt[],
+  dataset: Dataset,
+): { text: string; citations: Citation[] } {
+  // Build a subject→threadId lookup from the graph
+  const subjectToThreadId = new Map<string, string>();
+  for (const node of dataset.graph.nodes) {
+    if (node.type === "thread") {
+      const meta = node.meta as ThreadMeta;
+      subjectToThreadId.set(meta.subject.toLowerCase(), node.id);
+    }
+  }
+
+  const lines: string[] = [];
+  const citations: Citation[] = [];
+  let size = 0;
+  let index = 1;
+
+  for (const e of excerpts) {
+    const line = `[${index}] From ${e.sender}${e.date ? ` on ${e.date}` : ""}, subject "${e.subject}": ${e.excerpt}`;
+    if (size + line.length > MAX_EXCERPT_BLOCK_CHARS) break;
+    lines.push(line);
+    size += line.length;
+
+    const threadId = subjectToThreadId.get(e.subject.toLowerCase()) ?? `thread:${e.subject}`;
+    citations.push({
+      index,
+      threadId,
+      subject: e.subject,
+      from: e.sender,
+      snippet: e.excerpt.slice(0, 120),
+    });
+    index++;
+  }
+
+  return { text: lines.join("\n"), citations };
 }

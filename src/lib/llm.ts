@@ -1,6 +1,8 @@
-import type { Dataset, PersonMeta, ThreadMeta } from "./types";
+import type { Dataset, GraphLink, GraphNode, PersonMeta, ThreadMeta } from "./types";
 import { CHART_METRICS, isChartMetric, type ChartMetric } from "./charts";
-import { formatExcerpts, retrieveMessages } from "./retrieval";
+import { formatExcerptsWithCitations, retrieveMessages, type Citation } from "./retrieval";
+
+export type { Citation };
 
 /**
  * Provider-agnostic client for any OpenAI-compatible chat completions API.
@@ -224,6 +226,7 @@ export interface AssistantResult {
   answer: string;
   query?: string;
   chart?: { metric: ChartMetric; topN: number };
+  citations?: Citation[];
 }
 
 const SYSTEM_PROMPT = `You are the analysis assistant inside "Idea Network", a tool that visualizes an email network graph (people, threads, concepts, SOP/data references).
@@ -250,13 +253,54 @@ function extractJson(text: string): string {
   return raw.slice(start, end + 1);
 }
 
+/** Build a structured summary of the visible graph for the "Explain this graph" mode. */
+export function buildGraphSummary(visibleNodes: GraphNode[], visibleLinks: GraphLink[]): string {
+  const typeCounts: Record<string, number> = {};
+  for (const n of visibleNodes) typeCounts[n.type] = (typeCounts[n.type] ?? 0) + 1;
+
+  const people = visibleNodes.filter((n) => n.type === "person");
+  const threads = visibleNodes.filter((n) => n.type === "thread");
+  const concepts = visibleNodes.filter((n) => n.type === "concept");
+
+  const degreeMap = new Map<string, number>();
+  for (const l of visibleLinks) {
+    const s = typeof l.source === "object" ? (l.source as { id: string }).id : (l.source as string);
+    const t = typeof l.target === "object" ? (l.target as { id: string }).id : (l.target as string);
+    degreeMap.set(s, (degreeMap.get(s) ?? 0) + 1);
+    degreeMap.set(t, (degreeMap.get(t) ?? 0) + 1);
+  }
+
+  const top5People = people
+    .sort((a, b) => (degreeMap.get(b.id) ?? 0) - (degreeMap.get(a.id) ?? 0))
+    .slice(0, 5)
+    .map((n) => `${n.label} (degree ${degreeMap.get(n.id) ?? 0})`);
+
+  const top5Threads = threads
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5)
+    .map((n) => `"${n.label}" (${n.count} msgs)`);
+
+  const top5Concepts = concepts
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5)
+    .map((n) => n.label);
+
+  return [
+    `Visible graph: ${visibleNodes.length} nodes (${Object.entries(typeCounts).map(([k, v]) => `${v} ${k}`).join(", ")}), ${visibleLinks.length} links.`,
+    top5People.length ? `Top people by degree: ${top5People.join("; ")}` : "",
+    top5Threads.length ? `Top threads by message count: ${top5Threads.join("; ")}` : "",
+    top5Concepts.length ? `Top concepts: ${top5Concepts.join(", ")}` : "",
+  ].filter(Boolean).join("\n");
+}
+
 export async function askAssistant(
   config: LlmConfig,
   dataset: Dataset,
   question: string,
   onToken?: (token: string) => void,
 ): Promise<AssistantResult> {
-  const excerptBlock = formatExcerpts(retrieveMessages(dataset, question));
+  const excerpts = retrieveMessages(dataset, question);
+  const { text: excerptBlock, citations } = formatExcerptsWithCitations(excerpts, dataset);
   const userContent = [
     `Dataset digest:\n${buildDatasetContext(dataset)}`,
     ...(excerptBlock ? [`Relevant message excerpts:\n${excerptBlock}`] : []),
@@ -289,5 +333,48 @@ export async function askAssistant(
     const topN = typeof chart.topN === "number" && chart.topN >= 3 && chart.topN <= 20 ? chart.topN : 10;
     result.chart = { metric: chart.metric, topN };
   }
+  if (citations.length > 0) result.citations = citations;
   return result;
+}
+
+const EXPLAIN_GRAPH_PROMPT = `You are the analysis assistant inside "Idea Network", a tool that visualizes an email communication network graph.
+
+Describe the key relationships and themes in this communication network. Identify the most central people, active discussion topics, and important concepts. Be concise (under 200 words).`;
+
+/** "Explain this graph" mode — summarizes the currently visible subgraph. */
+export async function explainGraph(
+  config: LlmConfig,
+  visibleNodes: GraphNode[],
+  visibleLinks: GraphLink[],
+  onToken?: (token: string) => void,
+): Promise<string> {
+  const summary = buildGraphSummary(visibleNodes, visibleLinks);
+  return streamChatCompletion(
+    config,
+    [
+      { role: "system", content: EXPLAIN_GRAPH_PROMPT },
+      { role: "user", content: summary },
+    ],
+    onToken,
+  );
+}
+
+const DRAFT_QUERY_PROMPT = `You are the query translator for "Idea Network". Convert the user's natural-language description into a single DSL query string.
+
+Query DSL: free text matches node labels; filters: type:person|thread|concept|sop, from:<name>, to:<name>, with:<name>, concept:<term>, sop:<term>, text:<term>, min-degree:<n>, min-count:<n>. Quote multi-word values: from:"walt thomas". Return ONLY the query string — no explanation, no quotes around it.`;
+
+/** "Draft query" mode — translates NL to DSL query. */
+export async function draftQuery(
+  config: LlmConfig,
+  description: string,
+  onToken?: (token: string) => void,
+): Promise<string> {
+  return streamChatCompletion(
+    config,
+    [
+      { role: "system", content: DRAFT_QUERY_PROMPT },
+      { role: "user", content: description },
+    ],
+    onToken,
+  );
 }
