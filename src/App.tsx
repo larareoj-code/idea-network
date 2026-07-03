@@ -17,9 +17,11 @@ import CommandPalette, { type PaletteAction } from "./components/CommandPalette"
 import GraphSearch from "./components/GraphSearch";
 import GraphFilters, { nonLargestComponentIds } from "./components/GraphFilters";
 
+// Synthetic, fully fictional data (see public/demo-samples) — the real
+// sample exports in public/samples/ are gitignored and never shipped.
 const SAMPLES = [
-  { url: "samples/inbox.csv", name: "inbox.csv" },
-  { url: "samples/sent.csv", name: "sent.csv" },
+  { url: "demo-samples/inbox.csv", name: "demo-inbox.csv" },
+  { url: "demo-samples/sent.csv", name: "demo-sent.csv" },
 ];
 
 type Panel = "details" | "charts" | "ask" | null;

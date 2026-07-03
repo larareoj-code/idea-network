@@ -1,0 +1,32 @@
+﻿"Subject","Body","From: (Name)","From: (Address)","From: (Type)","To: (Name)","To: (Address)","To: (Type)","CC: (Name)","CC: (Address)","CC: (Type)","BCC: (Name)","BCC: (Address)","BCC: (Type)","Billing Information","Categories","Importance","Mileage","Sensitivity"
+"4 RWSG DSR 12 MAR (DEMO DATA)","Good morning,
+
+Demo DSR for 4 RWSG as of 12 MAR.
+
+451 - 250hr phase inspection at Site A (Day 3).
+452 - swashplate replacement in progress, ETIC 15 MAR.
+
+V/R
+Marcus Hale
+CW3 (DEMO)
+","Hale, Marcus D CW3 FICTFLT 4 RWSG (DEMO)","marcus.d.hale.demo@example.com","SMTP","Nakada, Ellen R MAJ FICTFLT 4 RWSG (DEMO)","ellen.r.nakada.demo@example.com","SMTP","Whitfield, Dana K LTC FICTFLT 4 RWSG (DEMO)","dana.k.whitfield.demo@example.com","SMTP","","","","","","Normal","","Normal"
+"RE: 4 RWSG DSR 12 MAR (DEMO DATA)","Ma'am,
+
+Confirmed, part on hand, install scheduled tomorrow AM.
+
+Marcus
+","Hale, Marcus D CW3 FICTFLT 4 RWSG (DEMO)","marcus.d.hale.demo@example.com","SMTP","Nakada, Ellen R MAJ FICTFLT 4 RWSG (DEMO)","ellen.r.nakada.demo@example.com","SMTP","Boyer, Grant T CW2 FICTFLT 4 RWSG (DEMO)","grant.t.boyer.demo@example.com","SMTP","","","","","","Normal","","Normal"
+"4 RWSG DSR 13 MAR (DEMO DATA)","Good morning,
+
+451 - 250hr phase complete, released for flight.
+452 - swashplate install complete, ops check pending.
+
+Marcus Hale
+","Hale, Marcus D CW3 FICTFLT 4 RWSG (DEMO)","marcus.d.hale.demo@example.com","SMTP","Nakada, Ellen R MAJ FICTFLT 4 RWSG (DEMO)","ellen.r.nakada.demo@example.com","SMTP","Whitfield, Dana K LTC FICTFLT 4 RWSG (DEMO)","dana.k.whitfield.demo@example.com","SMTP","","","","","","Normal","","Normal"
+"4 RWSG DSR 14 MAR (DEMO DATA)","Good morning,
+
+460 - hydraulic flush complete, ops check good.
+465 - tail rotor gearbox seal replacement, Day 1 of 3.
+
+Marcus Hale
+","Hale, Marcus D CW3 FICTFLT 4 RWSG (DEMO)","marcus.d.hale.demo@example.com","SMTP","Nakada, Ellen R MAJ FICTFLT 4 RWSG (DEMO)","ellen.r.nakada.demo@example.com","SMTP","Whitfield, Dana K LTC FICTFLT 4 RWSG (DEMO);Reyes, Anthony M CW4 FICTFLT 4 RWSG (DEMO)","dana.k.whitfield.demo@example.com;anthony.m.reyes.demo@example.com","SMTP;SMTP","","","","","","Normal","","Normal"

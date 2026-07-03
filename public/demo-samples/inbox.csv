@@ -1,0 +1,100 @@
+﻿"Subject","Body","From: (Name)","From: (Address)","From: (Type)","To: (Name)","To: (Address)","To: (Type)","CC: (Name)","CC: (Address)","CC: (Type)","BCC: (Name)","BCC: (Address)","BCC: (Type)","Billing Information","Categories","Importance","Mileage","Sensitivity"
+"4 RWSG DSR 12 MAR (DEMO DATA)","Good morning,
+
+Demo DSR for 4 RWSG as of 12 MAR.
+
+451 - 250hr phase inspection at Site A (Day 3).
+452 - swashplate replacement in progress, ETIC 15 MAR.
+
+V/R
+Marcus Hale
+CW3 (DEMO)
+","Hale, Marcus D CW3 FICTFLT 4 RWSG (DEMO)","marcus.d.hale.demo@example.com","SMTP","Nakada, Ellen R MAJ FICTFLT 4 RWSG (DEMO)","ellen.r.nakada.demo@example.com","SMTP","Whitfield, Dana K LTC FICTFLT 4 RWSG (DEMO)","dana.k.whitfield.demo@example.com","SMTP","","","","","","Normal","","Normal"
+"RE: 4 RWSG DSR 12 MAR (DEMO DATA)","Marcus,
+
+Thanks for the update. Please confirm parts availability for the swashplate on 452 by end of day.
+
+Ellen Nakada
+MAJ (DEMO)
+
+________________________________
+From: Hale, Marcus D CW3 FICTFLT 4 RWSG (DEMO)
+Sent: Wednesday, March 12, 2026 8:14 AM
+To: Nakada, Ellen R MAJ FICTFLT 4 RWSG (DEMO)
+Subject: 4 RWSG DSR 12 MAR (DEMO DATA)
+
+Good morning,
+
+Demo DSR for 4 RWSG as of 12 MAR.
+","Nakada, Ellen R MAJ FICTFLT 4 RWSG (DEMO)","ellen.r.nakada.demo@example.com","SMTP","Hale, Marcus D CW3 FICTFLT 4 RWSG (DEMO)","marcus.d.hale.demo@example.com","SMTP","","","","","","","","","Normal","","Normal"
+"RE: 4 RWSG DSR 12 MAR (DEMO DATA)","Ma'am,
+
+Confirmed, part on hand, install scheduled tomorrow AM.
+
+Marcus
+","Hale, Marcus D CW3 FICTFLT 4 RWSG (DEMO)","marcus.d.hale.demo@example.com","SMTP","Nakada, Ellen R MAJ FICTFLT 4 RWSG (DEMO)","ellen.r.nakada.demo@example.com","SMTP","Boyer, Grant T CW2 FICTFLT 4 RWSG (DEMO)","grant.t.boyer.demo@example.com","SMTP","","","","","","Normal","","Normal"
+"4 RWSG DSR 13 MAR (DEMO DATA)","Good morning,
+
+451 - 250hr phase complete, released for flight.
+452 - swashplate install complete, ops check pending.
+
+Marcus Hale
+","Hale, Marcus D CW3 FICTFLT 4 RWSG (DEMO)","marcus.d.hale.demo@example.com","SMTP","Nakada, Ellen R MAJ FICTFLT 4 RWSG (DEMO)","ellen.r.nakada.demo@example.com","SMTP","Whitfield, Dana K LTC FICTFLT 4 RWSG (DEMO)","dana.k.whitfield.demo@example.com","SMTP","","","","","","Normal","","Normal"
+"Hydraulic flush - Tail 460 (DEMO DATA)","Team,
+
+460 requires a hydraulic flush this week per the demo maintenance schedule. Grant, can you coordinate with the shop?
+
+Priya Orsini
+SFC (DEMO)
+","Orsini, Priya SFC FICTFLT 4 RWSG (DEMO)","priya.orsini.demo@example.com","SMTP","Boyer, Grant T CW2 FICTFLT 4 RWSG (DEMO)","grant.t.boyer.demo@example.com","SMTP","Reyes, Anthony M CW4 FICTFLT 4 RWSG (DEMO)","anthony.m.reyes.demo@example.com","SMTP","","","","","","Normal","","Normal"
+"RE: Hydraulic flush - Tail 460 (DEMO DATA)","Roger, scheduling for Thursday. Will need the shop bay reserved.
+
+Grant Boyer
+","Boyer, Grant T CW2 FICTFLT 4 RWSG (DEMO)","grant.t.boyer.demo@example.com","SMTP","Orsini, Priya SFC FICTFLT 4 RWSG (DEMO)","priya.orsini.demo@example.com","SMTP","","","","","","","","","Normal","","Normal"
+"ASM Notification - DEMO-26-XYZ-04","The following demo message has been added to the fictional Aviation Safety Notice system.
+Message Number: DEMO-26-XYZ-04
+Subject: Fictional rotor blade inspection advisory
+This is placeholder text for demo purposes only, not a real safety notice.
+https://example.com/demo/notice/xyz-04
+","Reyes, Anthony M CW4 FICTFLT 4 RWSG (DEMO)","anthony.m.reyes.demo@example.com","SMTP","Hale, Marcus D CW3 FICTFLT 4 RWSG (DEMO);Boyer, Grant T CW2 FICTFLT 4 RWSG (DEMO);Orsini, Priya SFC FICTFLT 4 RWSG (DEMO)","marcus.d.hale.demo@example.com;grant.t.boyer.demo@example.com;priya.orsini.demo@example.com","SMTP;SMTP;SMTP","","","","","","","","","Normal","","Normal"
+"Promotion ceremony - Cordova to SSG (DEMO DATA)","Team,
+
+I'd be honored if you'd join us to celebrate Luis's promotion to SSG next Friday.
+
+Anthony Reyes
+CW4 (DEMO)
+","Reyes, Anthony M CW4 FICTFLT 4 RWSG (DEMO)","anthony.m.reyes.demo@example.com","SMTP","Hale, Marcus D CW3 FICTFLT 4 RWSG (DEMO);Orsini, Priya SFC FICTFLT 4 RWSG (DEMO);Boyer, Grant T CW2 FICTFLT 4 RWSG (DEMO);Nakada, Ellen R MAJ FICTFLT 4 RWSG (DEMO);Whitfield, Dana K LTC FICTFLT 4 RWSG (DEMO);Brannigan, Sue Y CIV FICTFLT 4 RWSG (DEMO)","marcus.d.hale.demo@example.com;priya.orsini.demo@example.com;grant.t.boyer.demo@example.com;ellen.r.nakada.demo@example.com;dana.k.whitfield.demo@example.com;sue.brannigan.demo@example.com","SMTP;SMTP;SMTP;SMTP;SMTP;SMTP","","","","","","","","","Normal","","Normal"
+"RE: Promotion ceremony - Cordova to SSG (DEMO DATA)","Wouldn't miss it! Congrats Luis.
+
+Sue
+","Brannigan, Sue Y CIV FICTFLT 4 RWSG (DEMO)","sue.brannigan.demo@example.com","SMTP","Reyes, Anthony M CW4 FICTFLT 4 RWSG (DEMO)","anthony.m.reyes.demo@example.com","SMTP","","","","","","","","","Normal","","Normal"
+"SOP Update - Torque Procedures (DEMO DATA)","All,
+
+Attached (link) is the updated demo SOP for main rotor torque procedures. Please review before next phase inspection.
+
+https://example.com/demo/sop/torque-procedures
+
+Dana Whitfield
+LTC (DEMO)
+","Whitfield, Dana K LTC FICTFLT 4 RWSG (DEMO)","dana.k.whitfield.demo@example.com","SMTP","Hale, Marcus D CW3 FICTFLT 4 RWSG (DEMO);Orsini, Priya SFC FICTFLT 4 RWSG (DEMO);Boyer, Grant T CW2 FICTFLT 4 RWSG (DEMO);Nakada, Ellen R MAJ FICTFLT 4 RWSG (DEMO);Reyes, Anthony M CW4 FICTFLT 4 RWSG (DEMO)","marcus.d.hale.demo@example.com;priya.orsini.demo@example.com;grant.t.boyer.demo@example.com;ellen.r.nakada.demo@example.com;anthony.m.reyes.demo@example.com","SMTP;SMTP;SMTP;SMTP;SMTP","","","","","","","","","Normal","","Normal"
+"You have been added to a team in Microsoft Teams","Microsoft Teams
+
+Ellen added you to the 4 RWSG Demo Ops team!
+
+This is placeholder Teams notification text used for demo low-signal filtering.
+","Nakada, Ellen R MAJ FICTFLT 4 RWSG (DEMO)","ellen.r.nakada.demo@example.com","SMTP","Cordova, Luis A SGT FICTFLT 4 RWSG (DEMO)","luis.a.cordova.demo@example.com","SMTP","","","","","","","","","Normal","","Normal"
+"4 RWSG DSR 14 MAR (DEMO DATA)","Good morning,
+
+460 - hydraulic flush complete, ops check good.
+465 - tail rotor gearbox seal replacement, Day 1 of 3.
+
+Marcus Hale
+","Hale, Marcus D CW3 FICTFLT 4 RWSG (DEMO)","marcus.d.hale.demo@example.com","SMTP","Nakada, Ellen R MAJ FICTFLT 4 RWSG (DEMO)","ellen.r.nakada.demo@example.com","SMTP","Whitfield, Dana K LTC FICTFLT 4 RWSG (DEMO);Reyes, Anthony M CW4 FICTFLT 4 RWSG (DEMO)","dana.k.whitfield.demo@example.com;anthony.m.reyes.demo@example.com","SMTP;SMTP","","","","","","Normal","","Normal"
+"RE: 4 RWSG DSR 14 MAR (DEMO DATA)","Copy, thanks for the update.
+
+Ellen
+","Nakada, Ellen R MAJ FICTFLT 4 RWSG (DEMO)","ellen.r.nakada.demo@example.com","SMTP","Hale, Marcus D CW3 FICTFLT 4 RWSG (DEMO)","marcus.d.hale.demo@example.com","SMTP","","","","","","","","","Normal","","Normal"
+"Weekly parts request - Site A (DEMO DATA)","Requesting the following demo parts for next week's phase maintenance: swashplate bearing kit, tail rotor gearbox seal, hydraulic filter x2.
+
+Grant Boyer
+","Boyer, Grant T CW2 FICTFLT 4 RWSG (DEMO)","grant.t.boyer.demo@example.com","SMTP","Orsini, Priya SFC FICTFLT 4 RWSG (DEMO)","priya.orsini.demo@example.com","SMTP","Hale, Marcus D CW3 FICTFLT 4 RWSG (DEMO)","marcus.d.hale.demo@example.com","SMTP","","","","","","Normal","","Normal"
