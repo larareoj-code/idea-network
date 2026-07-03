@@ -180,13 +180,12 @@ export default function GraphView({ graph, selectedId, highlightIds, onSelect, o
         const hovered = hoverRef.current?.id === node.id;
         const searchHit = hilite !== null && hilite.has(node.id);
         const lod = stateRef.current.nodeCount > LOD_NODE_THRESHOLD;
+        // Ambient labels are hover/selection/search only — no auto-reveal by
+        // degree at moderate zoom, which clutters dense graphs. Zooming in
+        // far enough still reveals labels for everything in view.
         const showLabel =
           !dimmed &&
-          (hovered ||
-            node.id === sel ||
-            searchHit ||
-            focused ||
-            (!lod && (globalScale > 2.2 || (globalScale > 1.2 && node.degree >= 8))));
+          (hovered || node.id === sel || searchHit || focused || (!lod && globalScale > 2.2));
         if (showLabel) {
           const fontSize = Math.max(11 / globalScale, 2.2);
           ctx.font = `${hovered || node.id === sel ? 600 : 400} ${fontSize}px Inter, sans-serif`;
