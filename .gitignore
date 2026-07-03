@@ -4,3 +4,7 @@ data/
 public/samples/
 *.local
 .DS_Store
+
+# Tauri build artifacts
+src-tauri/target/
+src-tauri/WixTools/

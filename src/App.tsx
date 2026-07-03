@@ -31,6 +31,7 @@ import ImportReviewPanel, { shouldSkipReview } from "./components/ImportReviewPa
 import { GRAPH_MODES, type GraphMode } from "./lib/graphModes";
 import { PerfPanel } from "./components/PerfPanel";
 import { DEFAULT_BUDGET, thinEdges, sampleNodes } from "./lib/perf";
+import { TauriFileBar } from "./components/FilePicker";
 
 // Synthetic, fully fictional data (see public/demo-samples) — the real
 // sample exports in public/samples/ are gitignored and never shipped.
@@ -671,6 +672,13 @@ export default function App() {
           </svg>
         </button>
       </div>
+      <TauriFileBar
+        onFiles={onFiles}
+        onProjectJson={(json) => {
+          try { applyDataset(importDatasetJson(json)); } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+        }}
+        onExportJson={() => exportDatasetJson(dataset!)}
+      />
       <Sidebar
         graph={dataset?.graph ?? null}
         search={search}
