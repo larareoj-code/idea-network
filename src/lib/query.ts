@@ -14,6 +14,7 @@ import type { Dataset, GraphNode, NodeType, PersonMeta, ThreadMeta } from "./typ
  *   with:<name>      threads a matching person participated in + the person
  *   concept:<term>   concept nodes + threads mentioning them
  *   sop:<term>       SOP/data nodes + their threads
+ *   community:<id>   people/threads in a detected community (c1, 1, …)
  *   min-degree:<n>   nodes with degree >= n
  *   min-count:<n>    nodes with count >= n
  */
@@ -146,6 +147,15 @@ export function runQuery(dataset: Dataset, input: string): Set<string> | null {
         }
         break;
       }
+      case "community": {
+        const want = f.value.startsWith("c") ? f.value : `c${f.value}`;
+        for (const n of nodes) {
+          const cid =
+            n.meta.kind === "person" || n.meta.kind === "thread" ? n.meta.communityId : undefined;
+          if (cid === want) ids.add(n.id);
+        }
+        break;
+      }
       case "min-degree":
       case "mindegree": {
         const n = Number(f.value);
@@ -183,6 +193,7 @@ export const QUERY_HELP = [
   ["concept:phase", "concept + related threads"],
   ['text:"hyd flush"', "full-text in message bodies"],
   ["sop:dsr", "SOP/data refs + threads"],
+  ["community:1", "people/threads in community 1"],
   ["min-degree:5", "well-connected nodes"],
   ['"exact phrase"', "quoted free text"],
 ] as const;

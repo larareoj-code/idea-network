@@ -30,6 +30,12 @@ export interface Message {
   approxDate?: string;
   /** Exact date (ISO string) — available from PST/MSG/EML sources, never CSV. */
   date?: string;
+  /** RFC 2822 Message-ID (no angle brackets) — EML/MSG/PST sources only. */
+  messageId?: string;
+  /** RFC 2822 In-Reply-To msg-id (no angle brackets). */
+  inReplyTo?: string;
+  /** RFC 2822 References msg-ids, oldest first (no angle brackets). */
+  references?: string[];
 }
 
 export type NodeType = "person" | "thread" | "concept" | "sop";
@@ -55,6 +61,7 @@ export interface PersonMeta {
   sentCount: number;
   receivedCount: number;
   messageIds: string[];
+  communityId?: string;
 }
 
 export interface ThreadMeta {
@@ -64,6 +71,7 @@ export interface ThreadMeta {
   participantKeys: string[];
   approxDates: string[];
   lowSignal: boolean;
+  communityId?: string;
 }
 
 export interface ConceptMeta {
