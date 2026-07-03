@@ -2,6 +2,86 @@ import { useRef, useState } from "react";
 import type { DragEvent, ReactNode } from "react";
 import { ACCEPTED_EXTENSIONS, FILE_ACCEPT, type ParseProgress } from "../lib/ingest";
 
+interface FirstRunProps {
+  onFiles: (files: File[]) => void;
+  onLoadSamples: () => void;
+  onReopenSaved: () => void;
+  hasSaved: boolean;
+}
+
+/** Three-path welcome screen shown on first visit (no dataset, not booting). */
+export function FirstRunScreen({ onFiles, onLoadSamples, onReopenSaved, hasSaved }: FirstRunProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  return (
+    <div className="firstrun-bg">
+      <div className="firstrun-wrap">
+        <div className="firstrun-header">
+          <svg className="firstrun-logo" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <circle cx="18" cy="18" r="5" fill="var(--accent)" opacity="0.9"/>
+            <circle cx="6" cy="10" r="3.5" fill="var(--concept)" opacity="0.8"/>
+            <circle cx="30" cy="10" r="3.5" fill="var(--person)" opacity="0.8"/>
+            <circle cx="6" cy="26" r="3.5" fill="var(--thread)" opacity="0.8"/>
+            <circle cx="30" cy="26" r="3.5" fill="var(--sop)" opacity="0.8"/>
+            <line x1="18" y1="13" x2="6" y2="10" stroke="var(--border-strong)" strokeWidth="1.5"/>
+            <line x1="18" y1="13" x2="30" y2="10" stroke="var(--border-strong)" strokeWidth="1.5"/>
+            <line x1="18" y1="23" x2="6" y2="26" stroke="var(--border-strong)" strokeWidth="1.5"/>
+            <line x1="18" y1="23" x2="30" y2="26" stroke="var(--border-strong)" strokeWidth="1.5"/>
+          </svg>
+          <h1 className="firstrun-title">Idea Network</h1>
+          <p className="firstrun-subtitle">Map the people, threads, and concepts in your email.</p>
+        </div>
+
+        <div className="firstrun-cards">
+          <button className="firstrun-card firstrun-card--primary" onClick={onLoadSamples}>
+            <svg className="firstrun-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            <span className="firstrun-card-title">Load demo</span>
+            <span className="firstrun-card-desc">Explore a synthetic dataset instantly — no files needed.</span>
+          </button>
+
+          <button className="firstrun-card" onClick={() => inputRef.current?.click()}>
+            <svg className="firstrun-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <span className="firstrun-card-title">Import Outlook export</span>
+            <span className="firstrun-card-desc">Drop .csv, .pst, .msg, or .eml files from your inbox.</span>
+          </button>
+
+          <button
+            className={`firstrun-card ${!hasSaved ? "firstrun-card--disabled" : ""}`}
+            onClick={hasSaved ? onReopenSaved : undefined}
+            disabled={!hasSaved}
+            title={hasSaved ? undefined : "No saved graph found in this browser"}
+          >
+            <svg className="firstrun-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+              <polyline points="9 22 9 12 15 12 15 22"/>
+            </svg>
+            <span className="firstrun-card-title">Reopen saved graph</span>
+            <span className="firstrun-card-desc">{hasSaved ? "Continue from your last session." : "No saved graph in this browser yet."}</span>
+          </button>
+        </div>
+
+        <input
+          ref={inputRef}
+          type="file"
+          accept={FILE_ACCEPT}
+          multiple
+          hidden
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            if (files.length) onFiles(files);
+            e.target.value = "";
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 interface Props {
   onFiles: (files: File[]) => void;
   onLoadSamples: () => void;
