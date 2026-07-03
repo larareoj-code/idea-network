@@ -2014,3 +2014,17 @@ kbd {
 .tt-row b {
   color: var(--text);
 }
+
+/* ─── Tauri native file bar ─── */
+.tauri-file-bar {
+  display: flex;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg-panel-2);
+  border-bottom: 1px solid var(--border);
+  grid-column: 1 / -1;
+}
+.tauri-file-bar .btn {
+  font-size: 12px;
+  padding: 4px 10px;
+}
