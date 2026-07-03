@@ -1,6 +1,7 @@
 import { Buffer } from "buffer";
 import type { Message, Participant } from "./types";
 import { hashMessage, isLowSignal, makeParticipant } from "./parseOutlookCsv";
+import { cleanRfcId, parseReplyHeaders } from "./headers";
 
 /**
  * Parse an Outlook .pst data file (File → Import/Export → "Outlook Data
@@ -30,6 +31,9 @@ interface PstMessageLike {
   clientSubmitTime?: Date | null;
   importance?: number;
   numberOfRecipients?: number;
+  transportMessageHeaders?: string;
+  internetMessageId?: string;
+  inReplyToId?: string;
   getRecipient(i: number): PstRecipientLike;
 }
 
@@ -79,6 +83,10 @@ function convertMessage(pstMsg: PstMessageLike, source: string): Message | null 
   const when = pstMsg.messageDeliveryTime ?? pstMsg.clientSubmitTime;
   const date = when && !Number.isNaN(when.getTime()) ? when.toISOString() : undefined;
 
+  const reply = parseReplyHeaders(pstMsg.transportMessageHeaders);
+  const messageId = reply.messageId ?? cleanRfcId(pstMsg.internetMessageId);
+  const inReplyTo = reply.inReplyTo ?? cleanRfcId(pstMsg.inReplyToId);
+
   return {
     id: hashMessage(subject, body, from?.address ?? "", [...to, ...cc].map((p) => p.key), date ?? ""),
     subject,
@@ -91,6 +99,9 @@ function convertMessage(pstMsg: PstMessageLike, source: string): Message | null 
     source,
     lowSignal: isLowSignal(subject, body),
     date,
+    messageId,
+    inReplyTo,
+    references: reply.references,
   };
 }
 

@@ -1,36 +1,12 @@
 import type { Message, Participant } from "./types";
 import { hashMessage, isLowSignal, makeParticipant } from "./parseOutlookCsv";
+import { extractReplyHeaders, unfoldHeaders } from "./headers";
 
 /**
  * Minimal RFC-822/MIME parser for .eml files (Outlook "save as" / drag-out
  * from other clients). Handles folded headers, quoted-printable and base64
  * text bodies, and picks the first text/plain part of multipart messages.
  */
-
-function unfoldHeaders(raw: string): Map<string, string> {
-  const headers = new Map<string, string>();
-  const lines = raw.split(/\r?\n/);
-  let current = "";
-  const commit = () => {
-    const idx = current.indexOf(":");
-    if (idx > 0) {
-      const key = current.slice(0, idx).trim().toLowerCase();
-      const value = current.slice(idx + 1).trim();
-      // Keep the first occurrence (Received etc. repeat; we don't need them).
-      if (!headers.has(key)) headers.set(key, value);
-    }
-  };
-  for (const line of lines) {
-    if (/^[ \t]/.test(line) && current) {
-      current += " " + line.trim();
-    } else {
-      if (current) commit();
-      current = line;
-    }
-  }
-  if (current) commit();
-  return headers;
-}
 
 /** TextDecoder for the declared charset, falling back to UTF-8 for unknown labels. */
 function decoderFor(charset: string): TextDecoder {
@@ -176,6 +152,8 @@ export function parseEml(text: string, source: string): Message[] {
     if (!Number.isNaN(d.getTime())) date = d.toISOString();
   }
 
+  const { messageId, inReplyTo, references } = extractReplyHeaders(headers);
+
   return [
     {
       id: hashMessage(subject, body, from?.address ?? "", [...to, ...cc].map((p) => p.key), date ?? ""),
@@ -189,6 +167,9 @@ export function parseEml(text: string, source: string): Message[] {
       source,
       lowSignal: isLowSignal(subject, body),
       date,
+      messageId,
+      inReplyTo,
+      references,
     },
   ];
 }

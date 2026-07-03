@@ -21,6 +21,7 @@ export type ChartMetric =
   | "biggest-threads"
   | "top-concepts"
   | "sop-mentions"
+  | "communities"
   | "type-distribution"
   | "messages-over-time";
 
@@ -31,6 +32,7 @@ export const CHART_METRICS: { id: ChartMetric; label: string; kind: "bar" | "don
   { id: "biggest-threads", label: "Largest threads (participants)", kind: "bar" },
   { id: "top-concepts", label: "Top concepts", kind: "bar" },
   { id: "sop-mentions", label: "SOP / data references", kind: "bar" },
+  { id: "communities", label: "Community sizes", kind: "bar" },
   { id: "type-distribution", label: "Node type distribution", kind: "donut" },
   { id: "messages-over-time", label: "Messages over time", kind: "bar" },
 ];
@@ -119,6 +121,19 @@ export function buildChart(dataset: Dataset, metric: ChartMetric, topN = 10): Ch
             .map((n) => ({ label: n.label, value: n.count, nodeId: n.id })),
         ),
       };
+    case "communities": {
+      const counts = new Map<string, number>();
+      for (const n of nodes) {
+        if (n.type !== "person") continue;
+        const c = (n.meta as PersonMeta).communityId;
+        if (c) counts.set(c, (counts.get(c) ?? 0) + 1);
+      }
+      return {
+        kind: "bar",
+        title: `Largest ${topN} communities by members`,
+        data: top([...counts.entries()].map(([label, value]) => ({ label, value }))),
+      };
+    }
     case "messages-over-time": {
       // Chronological month buckets from exact dates (PST/MSG/EML sources).
       // CSV exports carry no dates, so undated messages are counted separately.

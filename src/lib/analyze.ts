@@ -10,23 +10,17 @@ import type {
   ThreadMeta,
 } from "./types";
 
+import { assignThreads, normalizeSubject } from "./threading";
+import { applyCommunities } from "./communities";
+
+export { normalizeSubject };
+
 export interface AnalyzeOptions {
   /** How many concept nodes to keep. */
   maxConcepts?: number;
 }
 
 const DEFAULTS: Required<AnalyzeOptions> = { maxConcepts: 30 };
-
-/** Strip Re:/Fw:/Fwd: prefixes repeatedly, trim, casefold. */
-export function normalizeSubject(subject: string): string {
-  let s = (subject || "").trim();
-  let prev = "";
-  while (prev !== s) {
-    prev = s;
-    s = s.replace(/^(re|fw|fwd)\s*:\s*/i, "").trim();
-  }
-  return s.toLowerCase();
-}
 
 const STOPWORDS = new Set(
   (
@@ -120,6 +114,7 @@ export function analyze(messages: Message[], options: AnalyzeOptions = {}): Grap
   const persons = new Map<string, GraphNode>();
   const threads = new Map<string, GraphNode>();
   const links = new LinkBag();
+  const threadIds = assignThreads(messages);
 
   const personNode = (p: Participant): GraphNode => {
     const id = `person:${p.key}`;
@@ -149,7 +144,7 @@ export function analyze(messages: Message[], options: AnalyzeOptions = {}): Grap
   // Pass 1: persons + threads + participation edges
   for (const msg of messages) {
     const normSubject = normalizeSubject(msg.subject) || "(no subject)";
-    const threadId = `thread:${normSubject}`;
+    const threadId = threadIds.get(msg.id)!;
     let thread = threads.get(threadId);
     if (!thread) {
       thread = {
@@ -218,7 +213,7 @@ export function analyze(messages: Message[], options: AnalyzeOptions = {}): Grap
 
   for (const msg of messages) {
     if (msg.lowSignal) continue;
-    const threadId = `thread:${normalizeSubject(msg.subject) || "(no subject)"}`;
+    const threadId = threadIds.get(msg.id)!;
     const tokens = tokenize(`${msg.subject}\n${cleanBodyForConcepts(msg.body)}`);
     for (let i = 0; i < tokens.length; i++) {
       bump(tokens[i], threadId, false);
@@ -268,7 +263,7 @@ export function analyze(messages: Message[], options: AnalyzeOptions = {}): Grap
   // Pass 3: SOP / structured references
   const sops = new Map<string, GraphNode>();
   for (const msg of messages) {
-    const threadId = `thread:${normalizeSubject(msg.subject) || "(no subject)"}`;
+    const threadId = threadIds.get(msg.id)!;
     const text = `${msg.subject}\n${msg.body}`;
     for (const pat of SOP_PATTERNS) {
       pat.regex.lastIndex = 0;
@@ -312,5 +307,7 @@ export function analyze(messages: Message[], options: AnalyzeOptions = {}): Grap
   }
   for (const n of nodes) n.degree = degree.get(n.id) ?? 0;
 
-  return { nodes, links: allLinks };
+  const graph = { nodes, links: allLinks };
+  applyCommunities(graph);
+  return graph;
 }

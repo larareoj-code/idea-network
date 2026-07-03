@@ -1,6 +1,7 @@
 import MsgReader from "@kenjiuno/msgreader";
 import type { Message, Participant } from "./types";
 import { hashMessage, isLowSignal, makeParticipant } from "./parseOutlookCsv";
+import { cleanRfcId, parseReplyHeaders } from "./headers";
 
 /** Parse a single Outlook .msg file (CFB format, drag-out from Outlook). */
 export function parseMsg(buffer: ArrayBuffer, source: string): Message[] {
@@ -33,6 +34,11 @@ export function parseMsg(buffer: ArrayBuffer, source: string): Message[] {
     if (!Number.isNaN(d.getTime())) date = d.toISOString();
   }
 
+  // PidTagTransportMessageHeaders carries the raw RFC-822 header block for
+  // received mail; sent items often lack it, so PidTagInternetMessageId fills in.
+  const reply = parseReplyHeaders(data.headers);
+  const messageId = reply.messageId ?? cleanRfcId(data.messageId);
+
   return [
     {
       id: hashMessage(subject, body, from?.address ?? "", [...to, ...cc].map((p) => p.key), date ?? ""),
@@ -46,6 +52,9 @@ export function parseMsg(buffer: ArrayBuffer, source: string): Message[] {
       source,
       lowSignal: isLowSignal(subject, body),
       date,
+      messageId,
+      inReplyTo: reply.inReplyTo,
+      references: reply.references,
     },
   ];
 }
