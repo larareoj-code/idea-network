@@ -375,7 +375,11 @@ a:hover {
 .statsbar .sources {
   border-left: 1px solid var(--border);
   color: var(--text-faint);
+  max-width: 40vw;
+  overflow: hidden;
   padding-left: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ---- Detail panel ---- */
