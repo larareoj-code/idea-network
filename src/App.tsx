@@ -26,7 +26,9 @@ import AskPanel from "./components/AskPanel";
 import CommandPalette, { type PaletteAction } from "./components/CommandPalette";
 import GraphSearch from "./components/GraphSearch";
 import GraphFilters, { nonLargestComponentIds } from "./components/GraphFilters";
+import GraphModeBar from "./components/GraphModeBar";
 import ImportReviewPanel, { shouldSkipReview } from "./components/ImportReviewPanel";
+import { GRAPH_MODES, type GraphMode } from "./lib/graphModes";
 
 // Synthetic, fully fictional data (see public/demo-samples) — the real
 // sample exports in public/samples/ are gitignored and never shipped.
@@ -73,6 +75,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [hasSaved, setHasSaved] = useState(false);
   const [theme, setThemeState] = useState(getStoredTheme);
+  const [graphMode, setGraphMode] = useState<GraphMode | null>(null);
   const [pendingItems, setPendingItems] = useState<IngestItem[] | null>(null);
   const [pendingErrors, setPendingErrors] = useState<string[]>([]);
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
@@ -478,6 +481,16 @@ export default function App() {
     graphApi.current?.resetLayout();
   }, []);
 
+  const applyGraphMode = useCallback((mode: GraphMode) => {
+    const cfg = GRAPH_MODES[mode];
+    setGraphMode(mode);
+    setEnabledTypes(new Set(cfg.enabledTypes));
+    setLayoutMode(cfg.layoutMode);
+    setEnabledLinkTypes(new Set(cfg.enabledLinkTypes));
+    setSelectedId(null);
+    setIsolatedId(null);
+  }, []);
+
   const hasDates = useMemo(() => (dataset ? datasetHasDates(dataset.messages) : false), [dataset]);
 
   const maxLinkWeight = useMemo(() => {
@@ -711,7 +724,8 @@ export default function App() {
             >
               <GraphControls api={graphApi} selectedId={selectedId} onResetLayout={onResetLayout} />
               <div className="graph-side">
-                <GraphLayoutControls mode={layoutMode} onChange={setLayoutMode} hasDates={hasDates} />
+                <GraphModeBar activeMode={graphMode} hasDates={hasDates} onSelect={applyGraphMode} />
+                <GraphLayoutControls mode={layoutMode} onChange={(m) => { setLayoutMode(m); setGraphMode(null); }} hasDates={hasDates} />
                 <GraphDensityControls
                   settings={densitySettings}
                   onChange={setDensitySettings}
@@ -730,6 +744,14 @@ export default function App() {
               onPrev={() => stepMatch(-1)}
               onNext={() => stepMatch(1)}
             />
+            {multiSelectIds.size > 0 && (
+              <div className="multiselect-bar">
+                <span>{multiSelectIds.size} selected</span>
+                <button onClick={() => { for (const id of multiSelectIds) onHide(id); setMultiSelectIds(new Set()); }}>Hide all</button>
+                <button onClick={() => { for (const id of multiSelectIds) onPin(id); setMultiSelectIds(new Set()); }}>Pin all</button>
+                <button onClick={() => setMultiSelectIds(new Set())}>Clear</button>
+              </div>
+            )}
             <GraphFilters
               neighborhoodOnly={neighborhoodOnly}
               onToggleNeighborhood={() => setNeighborhoodOnly((v) => !v)}
