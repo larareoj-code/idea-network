@@ -29,6 +29,8 @@ import GraphFilters, { nonLargestComponentIds } from "./components/GraphFilters"
 import GraphModeBar from "./components/GraphModeBar";
 import ImportReviewPanel, { shouldSkipReview } from "./components/ImportReviewPanel";
 import { GRAPH_MODES, type GraphMode } from "./lib/graphModes";
+import { PerfPanel } from "./components/PerfPanel";
+import { DEFAULT_BUDGET, thinEdges, sampleNodes } from "./lib/perf";
 
 // Synthetic, fully fictional data (see public/demo-samples) — the real
 // sample exports in public/samples/ are gitignored and never shipped.
@@ -78,6 +80,7 @@ export default function App() {
   const [graphMode, setGraphMode] = useState<GraphMode | null>(null);
   const [pendingItems, setPendingItems] = useState<IngestItem[] | null>(null);
   const [pendingErrors, setPendingErrors] = useState<string[]>([]);
+  const [showPerfPanel, setShowPerfPanel] = useState(false);
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
   const graphApi = useRef<GraphViewHandle | null>(null);
 
@@ -320,6 +323,17 @@ export default function App() {
       const keep = nonLargestComponentIds(nodes, links);
       nodes = nodes.filter((n) => keep.has(n.id));
       prune();
+    }
+    // LOD: thin to budget for large graphs so the canvas stays interactive
+    if (nodes.length > DEFAULT_BUDGET.lodThreshold) {
+      nodes = sampleNodes(nodes, DEFAULT_BUDGET.lodThreshold);
+      const sampledIds = new Set(nodes.map((n) => n.id));
+      links = links.filter(
+        (l) => sampledIds.has(linkEndId(l.source)) && sampledIds.has(linkEndId(l.target)),
+      );
+    }
+    if (links.length > DEFAULT_BUDGET.edgeBudget) {
+      links = thinEdges(links, DEFAULT_BUDGET.edgeBudget);
     }
     return { nodes, links };
   }, [
@@ -786,7 +800,23 @@ export default function App() {
               <button className="dock-btn" onClick={() => setPaletteOpen(true)} title="Command palette (Ctrl+K)">
                 ⌘
               </button>
+              <button
+                className={`dock-btn ${showPerfPanel ? "active" : ""}`}
+                onClick={() => setShowPerfPanel((v) => !v)}
+                title="Performance diagnostics"
+              >
+                ⚡
+              </button>
             </div>
+            {showPerfPanel && visibleGraph && (
+              <PerfPanel
+                nodeCount={dataset.graph.nodes.length}
+                edgeCount={dataset.graph.links.length}
+                filteredNodeCount={visibleGraph.nodes.length}
+                filteredEdgeCount={visibleGraph.links.length}
+                onClose={() => setShowPerfPanel(false)}
+              />
+            )}
 
             <DetailPanel
               dataset={dataset}
