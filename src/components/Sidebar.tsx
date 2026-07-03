@@ -5,7 +5,14 @@ import { APP_VERSION } from "../lib/dataset";
 import { QUERY_HELP } from "../lib/query";
 import { FILE_ACCEPT } from "../lib/ingest";
 import { getStoredTheme, toggleTheme, type Theme } from "../lib/theme";
-import { deleteView, listSavedViews, saveView, type SavedView } from "../lib/savedViews";
+import {
+  deleteView,
+  listSavedViews,
+  PRESET_VIEWS,
+  renameView,
+  saveView,
+  type SavedView,
+} from "../lib/savedViews";
 
 const TYPE_LABELS: Record<NodeType, string> = {
   person: "People",
@@ -188,12 +195,21 @@ function ViewsSection({
 }) {
   const [views, setViews] = useState<SavedView[]>(listSavedViews);
   const [name, setName] = useState("");
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   const onSave = () => {
     const trimmed = name.trim();
     if (!trimmed) return;
     setViews(saveView({ id: crypto.randomUUID(), name: trimmed, ...currentViewState }));
     setName("");
+  };
+
+  const commitRename = () => {
+    const trimmed = renameValue.trim();
+    if (renamingId && trimmed) setViews(renameView(renamingId, trimmed));
+    setRenamingId(null);
+    setRenameValue("");
   };
 
   return (
@@ -214,21 +230,54 @@ function ViewsSection({
           Save
         </button>
       </div>
-      {views.length === 0 ? (
-        <div className="view-empty">Save the current search + filters as a named view.</div>
-      ) : (
-        <div className="view-list">
-          {views.map((v) => (
+      <div className="view-list">
+        {PRESET_VIEWS.map((v) => (
+          <div key={v.id} className="view-row">
+            <button className="view-apply" onClick={() => onApplyView(v)} title={`Apply preset "${v.name}"`}>
+              {v.name} <span className="view-preset-badge">preset</span>
+            </button>
+          </div>
+        ))}
+        {views.map((v) =>
+          renamingId === v.id ? (
+            <div key={v.id} className="view-row">
+              <input
+                className="search-input"
+                type="text"
+                value={renameValue}
+                autoFocus
+                onChange={(e) => setRenameValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commitRename();
+                  if (e.key === "Escape") setRenamingId(null);
+                }}
+                onBlur={commitRename}
+              />
+            </div>
+          ) : (
             <div key={v.id} className="view-row">
               <button className="view-apply" onClick={() => onApplyView(v)} title={`Apply view "${v.name}"`}>
                 {v.name}
+              </button>
+              <button
+                className="view-rename"
+                onClick={() => {
+                  setRenamingId(v.id);
+                  setRenameValue(v.name);
+                }}
+                title={`Rename view "${v.name}"`}
+              >
+                ✎
               </button>
               <button className="view-delete" onClick={() => setViews(deleteView(v.id))} title={`Delete view "${v.name}"`}>
                 ✕
               </button>
             </div>
-          ))}
-        </div>
+          ),
+        )}
+      </div>
+      {views.length === 0 && (
+        <div className="view-empty">Save the current search + filters as a named view.</div>
       )}
     </div>
   );

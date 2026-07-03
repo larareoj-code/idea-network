@@ -529,6 +529,7 @@ export default function App() {
               dataset={dataset}
               node={panel === "details" ? selectedNode : null}
               onNavigate={onPickNode}
+              onIsolate={onIsolate}
               onClose={() => setPanel(null)}
             />
             <div className={`detail ${panel === "charts" ? "open" : ""}`}>
