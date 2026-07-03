@@ -1078,6 +1078,40 @@ kbd {
   color: var(--danger);
 }
 
+.view-row .view-rename {
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 4px 6px;
+}
+
+.view-row .view-rename:hover {
+  color: var(--accent);
+}
+
+.view-preset-badge {
+  color: var(--text-faint);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.btn.small.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .view-empty {
   color: var(--text-faint);
   font-size: 12px;

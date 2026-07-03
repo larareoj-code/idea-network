@@ -1,4 +1,4 @@
-import { Fragment, useMemo } from "react";
+import { Fragment, useMemo, useRef } from "react";
 import type {
   ConceptMeta,
   Dataset,
@@ -15,9 +15,20 @@ interface Props {
   node: GraphNode | null;
   onNavigate: (nodeId: string) => void;
   onClose: () => void;
+  onIsolate: (nodeId: string) => void;
+  // Pin/hide/expand state lives in App (Phase A's ownership) — the panel only
+  // calls these props. Optional with no-op defaults so it works standalone
+  // until that branch merges.
+  onExpandNeighbors?: (nodeId: string) => void;
+  pinnedIds?: Set<string>;
+  onPin?: (nodeId: string) => void;
+  hiddenIds?: Set<string>;
+  onHide?: (nodeId: string) => void;
 }
 
 const URL_SPLIT_RE = /(https?:\/\/[^\s<>"]+)/g;
+const NOOP = () => {};
+const EMPTY_SET = new Set<string>();
 
 function Linkified({ text }: { text: string }) {
   const parts = text.split(URL_SPLIT_RE);
@@ -60,7 +71,35 @@ function MessageCard({ msg }: { msg: Message }) {
   );
 }
 
-export default function DetailPanel({ dataset, node, onNavigate, onClose }: Props) {
+function seenRange(msgs: Message[]): { first: string; last: string } | null {
+  const exact = msgs
+    .map((m) => (m.date ? new Date(m.date).getTime() : NaN))
+    .filter((t) => Number.isFinite(t));
+  if (exact.length > 0) {
+    return {
+      first: new Date(Math.min(...exact)).toLocaleDateString(),
+      last: new Date(Math.max(...exact)).toLocaleDateString(),
+    };
+  }
+  const approx = [...new Set(msgs.map((m) => m.approxDate).filter((d): d is string => !!d))].sort();
+  if (approx.length > 0) {
+    return { first: `~${approx[0]} (approx.)`, last: `~${approx[approx.length - 1]} (approx.)` };
+  }
+  return null;
+}
+
+export default function DetailPanel({
+  dataset,
+  node,
+  onNavigate,
+  onClose,
+  onIsolate,
+  onExpandNeighbors = NOOP,
+  pinnedIds = EMPTY_SET,
+  onPin = NOOP,
+  hiddenIds = EMPTY_SET,
+  onHide = NOOP,
+}: Props) {
   const messagesById = useMemo(() => {
     const map = new Map<string, Message>();
     for (const m of dataset?.messages ?? []) map.set(m.id, m);
@@ -72,6 +111,124 @@ export default function DetailPanel({ dataset, node, onNavigate, onClose }: Prop
     for (const n of dataset?.graph.nodes ?? []) map.set(n.id, n);
     return map;
   }, [dataset]);
+
+  const sourceTargetRef = useRef<HTMLDivElement>(null);
+
+  const nodeMessages = useMemo<Message[]>(() => {
+    if (!node || !dataset) return [];
+    const ids =
+      node.meta.kind === "person" || node.meta.kind === "thread"
+        ? node.meta.messageIds
+        : (node.meta as ConceptMeta | SopMeta).threadIds.flatMap(
+            (tid) => (nodesById.get(tid)?.meta as ThreadMeta | undefined)?.messageIds ?? [],
+          );
+    return [...new Set(ids)].map((id) => messagesById.get(id)).filter((m): m is Message => !!m);
+  }, [node, dataset, nodesById, messagesById]);
+
+  const sourceFiles = useMemo(
+    () => [...new Set(nodeMessages.map((m) => m.source))].sort(),
+    [nodeMessages],
+  );
+
+  const seen = useMemo(() => seenRange(nodeMessages), [nodeMessages]);
+
+  const revealSource = () => {
+    const el = sourceTargetRef.current;
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    const first = el.querySelector("details");
+    if (first) first.open = true;
+  };
+
+  const overview = (n: GraphNode) => (
+    <div className="detail-section">
+      <div className="kv"><span>Connections</span><b>{n.degree}</b></div>
+      {seen ? (
+        <>
+          <div className="kv"><span>First seen</span><span className="approx">{seen.first}</span></div>
+          <div className="kv"><span>Last seen</span><span className="approx">{seen.last}</span></div>
+        </>
+      ) : (
+        <div className="kv">
+          <span>First / last seen</span>
+          <span className="approx">unknown — no dates in this source</span>
+        </div>
+      )}
+    </div>
+  );
+
+  const actions = (n: GraphNode) => {
+    const pinned = pinnedIds.has(n.id);
+    const hidden = hiddenIds.has(n.id);
+    return (
+      <div className="detail-actions">
+        <button className="btn small" onClick={() => onIsolate(n.id)} title="Show only this node and its direct neighbors">
+          Isolate
+        </button>
+        <button
+          className="btn small"
+          onClick={() => onExpandNeighbors(n.id)}
+          title="Temporarily reveal this node's neighbors even if hidden by filters"
+        >
+          Expand neighbors
+        </button>
+        <button
+          className={`btn small ${pinned ? "active" : ""}`}
+          onClick={() => onPin(n.id)}
+          title={pinned ? "Unpin this node's position" : "Pin this node's position"}
+        >
+          {pinned ? "Pinned ●" : "Pin"}
+        </button>
+        <button className="btn small" onClick={() => onHide(n.id)} title={hidden ? "Unhide this node" : "Hide this node from the graph"}>
+          {hidden ? "Unhide" : "Hide"}
+        </button>
+        <button
+          className="btn small"
+          onClick={revealSource}
+          disabled={sourceFiles.length === 0}
+          title="Jump to the originating messages / source files in this panel"
+        >
+          Jump to source
+        </button>
+      </div>
+    );
+  };
+
+  const sourcesSection =
+    sourceFiles.length > 0 ? (
+      <div className="detail-section">
+        <div className="section-label">Source files</div>
+        <ul className="item-list">
+          {sourceFiles.map((s) => (
+            <li key={s} style={{ overflowWrap: "anywhere" }}>{s}</li>
+          ))}
+        </ul>
+      </div>
+    ) : null;
+
+  const relatedPeople = (threadIds: string[]) => {
+    const keys = new Set<string>();
+    for (const tid of threadIds) {
+      const tm = nodesById.get(tid)?.meta as ThreadMeta | undefined;
+      for (const k of tm?.participantKeys ?? []) keys.add(k);
+    }
+    const people = [...keys]
+      .map((k) => nodesById.get(`person:${k}`))
+      .filter((p): p is GraphNode => !!p);
+    if (people.length === 0) return null;
+    return (
+      <div className="detail-section">
+        <div className="section-label">Related people</div>
+        <ul className="item-list">
+          {people.map((p) => (
+            <li key={p.id} className="clickable" onClick={() => onNavigate(p.id)}>
+              {p.label}
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  };
 
   const content = () => {
     if (!node || !dataset) return null;
@@ -96,6 +253,8 @@ export default function DetailPanel({ dataset, node, onNavigate, onClose }: Prop
       const topContacts = [...contactCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
       return (
         <>
+          {overview(node)}
+          {actions(node)}
           <div className="detail-section">
             <div className="kv"><span>Messages</span><b>{node.count}</b></div>
             <div className="kv"><span>Sent</span><b>{meta.sentCount}</b></div>
@@ -133,6 +292,15 @@ export default function DetailPanel({ dataset, node, onNavigate, onClose }: Prop
               ))}
             </ul>
           </div>
+          <div ref={sourceTargetRef}>
+            {sourcesSection}
+            <div className="detail-section">
+              <div className="section-label">Messages</div>
+              {msgs.map((m) => (
+                <MessageCard key={m.id} msg={m} />
+              ))}
+            </div>
+          </div>
         </>
       );
     }
@@ -142,6 +310,8 @@ export default function DetailPanel({ dataset, node, onNavigate, onClose }: Prop
       const msgs = meta.messageIds.map((id) => messagesById.get(id)).filter((m): m is Message => !!m);
       return (
         <>
+          {overview(node)}
+          {actions(node)}
           <div className="detail-section">
             <div className="kv"><span>Messages</span><b>{msgs.length}</b></div>
             <div className="kv"><span>Participants</span><b>{meta.participantKeys.length}</b></div>
@@ -165,20 +335,24 @@ export default function DetailPanel({ dataset, node, onNavigate, onClose }: Prop
               })}
             </ul>
           </div>
-          <div className="detail-section">
-            <div className="section-label">Messages</div>
-            {msgs.map((m) => (
-              <MessageCard key={m.id} msg={m} />
-            ))}
+          <div ref={sourceTargetRef}>
+            {sourcesSection}
+            <div className="detail-section">
+              <div className="section-label">Messages</div>
+              {msgs.map((m) => (
+                <MessageCard key={m.id} msg={m} />
+              ))}
+            </div>
           </div>
         </>
       );
     }
 
-    // concept / sop: related threads
     const meta = node.meta as ConceptMeta | SopMeta;
     return (
       <>
+        {overview(node)}
+        {actions(node)}
         <div className="detail-section">
           {node.meta.kind === "concept" ? (
             <>
@@ -202,6 +376,8 @@ export default function DetailPanel({ dataset, node, onNavigate, onClose }: Prop
             ))}
           </ul>
         </div>
+        {relatedPeople(meta.threadIds)}
+        <div ref={sourceTargetRef}>{sourcesSection}</div>
       </>
     );
   };

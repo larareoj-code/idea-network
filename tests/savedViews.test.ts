@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { deleteView, listSavedViews, saveView, type SavedView } from "../src/lib/savedViews";
+import {
+  deleteView,
+  listSavedViews,
+  PRESET_VIEWS,
+  renameView,
+  saveView,
+  type SavedView,
+} from "../src/lib/savedViews";
 
 const store = new Map<string, string>();
 
@@ -50,6 +57,49 @@ describe("savedViews", () => {
     const views = listSavedViews();
     expect(views).toHaveLength(1);
     expect(views[0].name).toBe("After");
+  });
+
+  it("renames an existing view and preserves the rest", () => {
+    saveView(view("a", "Old name"));
+    saveView(view("b", "Other"));
+    const result = renameView("a", "New name");
+    expect(result.find((v) => v.id === "a")?.name).toBe("New name");
+    expect(listSavedViews().map((v) => v.name).sort()).toEqual(["New name", "Other"]);
+    const renamed = listSavedViews().find((v) => v.id === "a")!;
+    expect(renamed.search).toBe("type:concept");
+    expect(renamed.enabledTypes).toEqual(["person", "concept"]);
+  });
+
+  it("renaming a missing id is a no-op", () => {
+    saveView(view("a", "Kept"));
+    expect(renameView("nope", "Whatever").map((v) => v.name)).toEqual(["Kept"]);
+  });
+
+  it("old saved views without new optional fields still load", () => {
+    store.set("idea-network-saved-views", JSON.stringify([view("legacy", "Legacy")]));
+    const loaded = listSavedViews()[0];
+    expect(loaded.name).toBe("Legacy");
+    expect(loaded.layoutMode).toBeUndefined();
+    expect(loaded.camera).toBeUndefined();
+  });
+
+  it("exposes five built-in presets flagged and not persisted", () => {
+    expect(PRESET_VIEWS).toHaveLength(5);
+    for (const p of PRESET_VIEWS) {
+      expect(p.preset).toBe(true);
+      expect(p.id).toMatch(/^preset:/);
+      expect(p.name).toBeTruthy();
+      expect(p.enabledTypes.length).toBeGreaterThan(0);
+    }
+    expect(PRESET_VIEWS.map((p) => p.name)).toEqual([
+      "People map",
+      "Concept map",
+      "Thread clusters",
+      "SOP references",
+      "High-signal nodes only",
+    ]);
+    expect(PRESET_VIEWS.find((p) => p.id === "preset:high-signal")?.search).toBe("min-degree:2");
+    expect(listSavedViews()).toEqual([]);
   });
 
   it("survives corrupted storage", () => {
