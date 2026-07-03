@@ -2,7 +2,7 @@ import { analyze } from "./analyze";
 import type { Dataset, Message, SourceInfo } from "./types";
 
 export const SCHEMA_VERSION = 1 as const;
-export const APP_VERSION = "v0.5";
+export const APP_VERSION = "v0.6";
 
 export function buildDataset(messages: Message[], sources: SourceInfo[]): Dataset {
   return {
