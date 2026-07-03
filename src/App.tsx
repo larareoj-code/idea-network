@@ -774,7 +774,18 @@ export default function App() {
               onClose={() => setPanel(null)}
             />
             <div className={`detail ${panel === "charts" ? "open" : ""}`}>
-              {panel === "charts" && <ChartsPanel dataset={dataset} onPick={onPickNode} onClose={() => setPanel(null)} />}
+              {panel === "charts" && (
+                <ChartsPanel
+                  dataset={dataset}
+                  onPick={onPickNode}
+                  onClose={() => setPanel(null)}
+                  onHighlight={(nodeId) => {
+                    setSelectedId(nodeId);
+                    setPanel("details");
+                    graphApi.current?.centerOn(nodeId);
+                  }}
+                />
+              )}
             </div>
             <div className={`detail ${panel === "ask" ? "open" : ""}`}>
               {panel === "ask" && (

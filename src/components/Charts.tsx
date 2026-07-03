@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Dataset } from "../lib/types";
 import { buildChart, CHART_METRICS, type ChartMetric, type ChartSpec } from "../lib/charts";
+import { generateReport } from "../lib/report";
 
 export function Chart({ spec, onPick }: { spec: ChartSpec; onPick?: (nodeId: string) => void }) {
   if (spec.data.length === 0) {
@@ -101,12 +102,31 @@ interface PanelProps {
   dataset: Dataset;
   onPick: (nodeId: string) => void;
   onClose: () => void;
+  onHighlight?: (nodeId: string) => void;
 }
 
-export function ChartsPanel({ dataset, onPick, onClose }: PanelProps) {
+export function ChartsPanel({ dataset, onPick, onClose, onHighlight }: PanelProps) {
   const [metric, setMetric] = useState<ChartMetric>("top-senders");
   const [topN, setTopN] = useState(10);
   const spec = useMemo(() => buildChart(dataset, metric, topN), [dataset, metric, topN]);
+
+  const handlePick = (nodeId: string) => {
+    onPick(nodeId);
+    onHighlight?.(nodeId);
+  };
+
+  const onExportReport = () => {
+    const allSpecs = CHART_METRICS.map((m) => buildChart(dataset, m.id, topN));
+    const md = generateReport(dataset, allSpecs);
+    const date = new Date().toISOString().slice(0, 10);
+    const blob = new Blob([md], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `idea-network-report-${date}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <>
@@ -115,9 +135,14 @@ export function ChartsPanel({ dataset, onPick, onClose }: PanelProps) {
           <h2>Charts</h2>
           <div className="sub">Click a bar to jump to that node</div>
         </div>
-        <button className="detail-close" onClick={onClose} aria-label="Close panel">
-          ✕
-        </button>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <button className="btn small" onClick={onExportReport} title="Export Markdown report">
+            Export report
+          </button>
+          <button className="detail-close" onClick={onClose} aria-label="Close panel">
+            ✕
+          </button>
+        </div>
       </div>
       <div className="detail-body">
         <div className="chart-controls">
@@ -136,7 +161,7 @@ export function ChartsPanel({ dataset, onPick, onClose }: PanelProps) {
             ))}
           </select>
         </div>
-        <Chart spec={spec} onPick={onPick} />
+        <Chart spec={spec} onPick={handlePick} />
       </div>
     </>
   );

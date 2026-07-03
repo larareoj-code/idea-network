@@ -13,6 +13,7 @@ import {
   saveView,
   type SavedView,
 } from "../lib/savedViews";
+import { deleteQuery, listQueries, saveQuery, type SavedQuery } from "../lib/savedQueries";
 
 const TYPE_LABELS: Record<NodeType, string> = {
   person: "People",
@@ -120,6 +121,7 @@ export default function Sidebar({
         hideNonMatching={hideNonMatching}
         onToggleHide={onToggleHide}
       />
+      <SavedQueriesSection search={search} onSearch={onSearch} />
 
       <div>
         <div className="section-label">Node types</div>
@@ -283,6 +285,44 @@ function ViewsSection({
   );
 }
 
+interface BuilderState {
+  nodeType: string;
+  from: string;
+  to: string;
+  body: string;
+  after: string;
+  before: string;
+  minDegree: string;
+  source: string;
+  via: string;
+}
+
+const EMPTY_BUILDER: BuilderState = {
+  nodeType: "",
+  from: "",
+  to: "",
+  body: "",
+  after: "",
+  before: "",
+  minDegree: "",
+  source: "",
+  via: "",
+};
+
+function builderToDsl(b: BuilderState): string {
+  const parts: string[] = [];
+  if (b.nodeType) parts.push(`type:${b.nodeType}`);
+  if (b.from.trim()) parts.push(`from:${b.from.trim().includes(" ") ? `"${b.from.trim()}"` : b.from.trim()}`);
+  if (b.to.trim()) parts.push(`to:${b.to.trim().includes(" ") ? `"${b.to.trim()}"` : b.to.trim()}`);
+  if (b.body.trim()) parts.push(`text:${b.body.trim().includes(" ") ? `"${b.body.trim()}"` : b.body.trim()}`);
+  if (b.after) parts.push(`after:${b.after}`);
+  if (b.before) parts.push(`before:${b.before}`);
+  if (b.minDegree) parts.push(`min-degree:${b.minDegree}`);
+  if (b.source.trim()) parts.push(`source:${b.source.trim()}`);
+  if (b.via) parts.push(`via:${b.via}`);
+  return parts.join(" ");
+}
+
 function QuerySection({
   search,
   onSearch,
@@ -295,6 +335,19 @@ function QuerySection({
   onToggleHide: (v: boolean) => void;
 }) {
   const [showHelp, setShowHelp] = useState(false);
+  const [builderMode, setBuilderMode] = useState(false);
+  const [builder, setBuilder] = useState<BuilderState>(EMPTY_BUILDER);
+
+  const preview = builderToDsl(builder);
+
+  const applyBuilder = () => {
+    onSearch(preview);
+    setBuilderMode(false);
+  };
+
+  const setField = (field: keyof BuilderState, value: string) =>
+    setBuilder((prev) => ({ ...prev, [field]: value }));
+
   return (
     <div>
       <div className="section-label">
@@ -303,17 +356,102 @@ function QuerySection({
           ?
         </button>
       </div>
-      <input
-        className="search-input"
-        type="search"
-        placeholder="phase · from:hunt · type:concept…"
-        value={search}
-        onChange={(e) => onSearch(e.target.value)}
-      />
-      <label className="toggle-row" style={{ marginTop: 6 }}>
-        <input type="checkbox" checked={hideNonMatching} onChange={(e) => onToggleHide(e.target.checked)} />
-        Hide non-matching nodes
-      </label>
+
+      {!builderMode ? (
+        <>
+          <div style={{ display: "flex", gap: 4 }}>
+            <input
+              className="search-input"
+              type="search"
+              placeholder="Search nodes…"
+              value={search}
+              onChange={(e) => onSearch(e.target.value)}
+              style={{ flex: 1 }}
+            />
+            <button
+              className="btn small"
+              onClick={() => {
+                setBuilderMode(true);
+                setBuilder(EMPTY_BUILDER);
+              }}
+              title="Open query builder"
+            >
+              Build query
+            </button>
+          </div>
+          <label className="toggle-row" style={{ marginTop: 6 }}>
+            <input type="checkbox" checked={hideNonMatching} onChange={(e) => onToggleHide(e.target.checked)} />
+            Hide non-matching nodes
+          </label>
+        </>
+      ) : (
+        <div className="query-builder">
+          <div className="qb-row">
+            <label className="qb-label">Type</label>
+            <select className="select" value={builder.nodeType} onChange={(e) => setField("nodeType", e.target.value)}>
+              <option value="">all</option>
+              <option value="person">person</option>
+              <option value="thread">thread</option>
+              <option value="concept">concept</option>
+              <option value="sop">sop</option>
+            </select>
+          </div>
+          <div className="qb-row">
+            <label className="qb-label">From</label>
+            <input className="search-input" type="text" value={builder.from} onChange={(e) => setField("from", e.target.value)} />
+          </div>
+          <div className="qb-row">
+            <label className="qb-label">To</label>
+            <input className="search-input" type="text" value={builder.to} onChange={(e) => setField("to", e.target.value)} />
+          </div>
+          <div className="qb-row">
+            <label className="qb-label">Body text</label>
+            <input className="search-input" type="text" value={builder.body} onChange={(e) => setField("body", e.target.value)} />
+          </div>
+          <div className="qb-row">
+            <label className="qb-label">After</label>
+            <input className="search-input" type="date" value={builder.after} onChange={(e) => setField("after", e.target.value)} />
+          </div>
+          <div className="qb-row">
+            <label className="qb-label">Before</label>
+            <input className="search-input" type="date" value={builder.before} onChange={(e) => setField("before", e.target.value)} />
+          </div>
+          <div className="qb-row">
+            <label className="qb-label">Min degree</label>
+            <input className="search-input" type="number" min={1} max={50} value={builder.minDegree} onChange={(e) => setField("minDegree", e.target.value)} />
+          </div>
+          <div className="qb-row">
+            <label className="qb-label">Source file</label>
+            <input className="search-input" type="text" value={builder.source} onChange={(e) => setField("source", e.target.value)} />
+          </div>
+          <div className="qb-row">
+            <label className="qb-label">Via link type</label>
+            <select className="select" value={builder.via} onChange={(e) => setField("via", e.target.value)}>
+              <option value="">any</option>
+              <option value="participated">participated</option>
+              <option value="mentions">mentions</option>
+              <option value="references">references</option>
+            </select>
+          </div>
+          <div className="qb-preview">
+            <label className="qb-label">Preview query</label>
+            <input className="search-input" type="text" readOnly value={preview} style={{ fontFamily: "monospace", fontSize: 11 }} />
+          </div>
+          <div className="btn-row" style={{ marginTop: 6 }}>
+            <button className="btn primary small" onClick={applyBuilder} disabled={!preview}>
+              Apply
+            </button>
+            <button className="btn small" onClick={() => setBuilderMode(false)}>
+              Cancel
+            </button>
+          </div>
+          <label className="toggle-row" style={{ marginTop: 6 }}>
+            <input type="checkbox" checked={hideNonMatching} onChange={(e) => onToggleHide(e.target.checked)} />
+            Hide non-matching nodes
+          </label>
+        </div>
+      )}
+
       {showHelp && (
         <div className="query-help">
           {QUERY_HELP.map(([syntax, desc]) => (
@@ -322,6 +460,75 @@ function QuerySection({
               <span>{desc}</span>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SavedQueriesSection({ search, onSearch }: { search: string; onSearch: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [queries, setQueries] = useState<SavedQuery[]>(listQueries);
+  const [savingName, setSavingName] = useState("");
+  const [showNameInput, setShowNameInput] = useState(false);
+
+  const onSave = () => {
+    const trimmed = savingName.trim();
+    if (!trimmed || !search.trim()) return;
+    saveQuery(trimmed, search.trim());
+    setQueries(listQueries());
+    setSavingName("");
+    setShowNameInput(false);
+  };
+
+  const onDelete = (id: string) => {
+    deleteQuery(id);
+    setQueries(listQueries());
+  };
+
+  return (
+    <div>
+      <div className="section-label" style={{ cursor: "pointer" }} onClick={() => setOpen((v) => !v)}>
+        Saved queries
+        <span style={{ marginLeft: 4, fontSize: 10 }}>{open ? "▲" : "▼"}</span>
+      </div>
+      {open && (
+        <div>
+          {queries.length === 0 && (
+            <div className="view-empty">No saved queries yet.</div>
+          )}
+          {queries.map((q) => (
+            <div key={q.id} className="view-row">
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 500, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{q.name}</div>
+                <code style={{ fontSize: 10, opacity: 0.7, overflow: "hidden", textOverflow: "ellipsis", display: "block", whiteSpace: "nowrap" }}>{q.query}</code>
+              </div>
+              <button className="view-apply" title="Run query" onClick={() => onSearch(q.query)}>▶</button>
+              <button className="view-delete" title="Delete query" onClick={() => onDelete(q.id)}>×</button>
+            </div>
+          ))}
+          {search.trim() && !showNameInput && (
+            <button className="btn small" style={{ marginTop: 4 }} onClick={() => setShowNameInput(true)}>
+              Save current query
+            </button>
+          )}
+          {showNameInput && (
+            <div className="view-save-row" style={{ marginTop: 4 }}>
+              <input
+                className="search-input"
+                type="text"
+                placeholder="Query name…"
+                value={savingName}
+                autoFocus
+                onChange={(e) => setSavingName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") onSave();
+                  if (e.key === "Escape") setShowNameInput(false);
+                }}
+              />
+              <button className="btn small" onClick={onSave} disabled={!savingName.trim()}>Save</button>
+            </div>
+          )}
         </div>
       )}
     </div>
