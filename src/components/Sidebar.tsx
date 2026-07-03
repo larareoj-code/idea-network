@@ -4,6 +4,8 @@ import { NODE_COLORS } from "./GraphView";
 import { APP_VERSION } from "../lib/dataset";
 import { QUERY_HELP } from "../lib/query";
 import { FILE_ACCEPT } from "../lib/ingest";
+import { getStoredTheme, toggleTheme, type Theme } from "../lib/theme";
+import { deleteView, listSavedViews, saveView, type SavedView } from "../lib/savedViews";
 
 const TYPE_LABELS: Record<NodeType, string> = {
   person: "People",
@@ -13,6 +15,13 @@ const TYPE_LABELS: Record<NodeType, string> = {
 };
 
 export const ALL_TYPES: NodeType[] = ["person", "thread", "concept", "sop"];
+
+export interface ViewState {
+  search: string;
+  enabledTypes: NodeType[];
+  showPersonLinks: boolean;
+  hideNonMatching: boolean;
+}
 
 interface Props {
   graph: GraphData | null;
@@ -29,6 +38,8 @@ interface Props {
   onImport: (file: File) => void;
   onClear: () => void;
   hasData: boolean;
+  currentViewState: ViewState;
+  onApplyView: (view: SavedView) => void;
 }
 
 export default function Sidebar({
@@ -46,9 +57,12 @@ export default function Sidebar({
   onImport,
   onClear,
   hasData,
+  currentViewState,
+  onApplyView,
 }: Props) {
   const csvInputRef = useRef<HTMLInputElement>(null);
   const jsonInputRef = useRef<HTMLInputElement>(null);
+  const [theme, setThemeState] = useState<Theme>(getStoredTheme);
 
   const counts: Record<NodeType, number> = { person: 0, thread: 0, concept: 0, sop: 0 };
   if (graph) for (const n of graph.nodes) counts[n.type] += 1;
@@ -58,6 +72,13 @@ export default function Sidebar({
       <div className="brand">
         <h1>Idea Network</h1>
         <span className="badge">{APP_VERSION}</span>
+        <button
+          className="theme-toggle"
+          onClick={() => setThemeState(toggleTheme())}
+          title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+        >
+          {theme === "dark" ? "☀" : "☾"}
+        </button>
       </div>
 
       <div>
@@ -125,6 +146,8 @@ export default function Sidebar({
         </label>
       </div>
 
+      <ViewsSection currentViewState={currentViewState} onApplyView={onApplyView} />
+
       <div>
         <div className="section-label">Dataset</div>
         <div className="btn-row">
@@ -153,6 +176,61 @@ export default function Sidebar({
         palette · <kbd>Esc</kbd> reset.
       </div>
     </aside>
+  );
+}
+
+function ViewsSection({
+  currentViewState,
+  onApplyView,
+}: {
+  currentViewState: ViewState;
+  onApplyView: (view: SavedView) => void;
+}) {
+  const [views, setViews] = useState<SavedView[]>(listSavedViews);
+  const [name, setName] = useState("");
+
+  const onSave = () => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setViews(saveView({ id: crypto.randomUUID(), name: trimmed, ...currentViewState }));
+    setName("");
+  };
+
+  return (
+    <div>
+      <div className="section-label">Views</div>
+      <div className="view-save-row">
+        <input
+          className="search-input"
+          type="text"
+          placeholder="View name…"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onSave();
+          }}
+        />
+        <button className="btn small" onClick={onSave} disabled={!name.trim()} title="Save current view">
+          Save
+        </button>
+      </div>
+      {views.length === 0 ? (
+        <div className="view-empty">Save the current search + filters as a named view.</div>
+      ) : (
+        <div className="view-list">
+          {views.map((v) => (
+            <div key={v.id} className="view-row">
+              <button className="view-apply" onClick={() => onApplyView(v)} title={`Apply view "${v.name}"`}>
+                {v.name}
+              </button>
+              <button className="view-delete" onClick={() => setViews(deleteView(v.id))} title={`Delete view "${v.name}"`}>
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
