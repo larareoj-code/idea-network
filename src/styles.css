@@ -1207,3 +1207,174 @@ kbd {
   font-size: 12px;
   margin-top: 6px;
 }
+
+/* ---- v0.7: graph controls ---- */
+
+.graph-shell {
+  height: 100%;
+  position: relative;
+  width: 100%;
+}
+
+.graph-shell:fullscreen {
+  background: var(--bg);
+}
+
+.graph-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  left: 14px;
+  position: absolute;
+  top: 14px;
+  z-index: 8;
+}
+
+.graph-controls .dock-btn {
+  font-size: 16px;
+  height: 32px;
+  width: 32px;
+}
+
+.graph-controls .dock-btn:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.minimap {
+  background: color-mix(in srgb, var(--bg-panel) 82%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  bottom: 14px;
+  cursor: crosshair;
+  position: absolute;
+  right: 14px;
+  z-index: 8;
+}
+
+.graph-side {
+  bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  left: 58px;
+  max-height: calc(100% - 28px);
+  overflow-y: auto;
+  position: absolute;
+  top: auto;
+  width: 210px;
+  z-index: 8;
+}
+
+.graph-panel {
+  background: color-mix(in srgb, var(--bg-panel) 90%, transparent);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.graph-panel-title {
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  margin: 6px 0 6px;
+  text-transform: uppercase;
+}
+
+.graph-panel-title:first-child {
+  margin-top: 0;
+}
+
+.layout-modes,
+.density-linktypes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.layout-mode-btn {
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 3px 9px;
+}
+
+.layout-mode-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.layout-mode-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.density-row {
+  align-items: center;
+  color: var(--text-dim);
+  display: flex;
+  font-size: 11.5px;
+  gap: 8px;
+  margin: 5px 0;
+}
+
+.density-row > span:first-child {
+  flex: 0 0 74px;
+}
+
+.density-row input[type="range"] {
+  accent-color: var(--accent);
+  flex: 1;
+  min-width: 0;
+}
+
+.density-row select {
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  flex: 1;
+  font-size: 11.5px;
+  padding: 3px 6px;
+}
+
+.density-val {
+  color: var(--text-faint);
+  flex: 0 0 30px;
+  font-size: 10.5px;
+  text-align: right;
+}
+
+.context-menu {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+  padding: 4px;
+  position: absolute;
+  z-index: 20;
+}
+
+.context-menu button {
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12.5px;
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.context-menu button:hover {
+  background: var(--bg-hover);
+}

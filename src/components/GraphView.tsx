@@ -1,6 +1,16 @@
-import { useEffect, useMemo, useRef } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import ForceGraph from "force-graph";
-import type { GraphData, GraphLink, GraphNode, NodeType } from "../lib/types";
+import type { GraphData, GraphLink, GraphNode, Message, NodeType } from "../lib/types";
+import { buildLayoutForce, makeCollideForce, type LayoutMode } from "../lib/graphForces";
+import { DEFAULT_DENSITY, type DensitySettings } from "./GraphDensityControls";
 
 export const NODE_COLORS: Record<NodeType, string> = {
   person: "#60a5fa",
@@ -10,13 +20,19 @@ export const NODE_COLORS: Record<NodeType, string> = {
 };
 
 const DIM_NODE = "rgba(90, 99, 117, 0.18)";
-const DIM_LINK = "rgba(90, 99, 117, 0.06)";
-const LINK_COLOR = "rgba(120, 132, 158, 0.22)";
-const HILITE_LINK = "rgba(96, 165, 250, 0.55)";
+const LINK_ALPHA = 0.22;
+const DIM_LINK_ALPHA = 0.06;
+const HILITE_LINK_ALPHA = 0.55;
+const MULTI_COLOR = "#22d3ee";
+const PIN_COLOR = "#f59e0b";
 
 interface RuntimeNode extends GraphNode {
   x?: number;
   y?: number;
+  vx?: number;
+  vy?: number;
+  fx?: number;
+  fy?: number;
 }
 
 interface RuntimeLink {
@@ -26,12 +42,38 @@ interface RuntimeLink {
   weight: number;
 }
 
+export interface MinimapData {
+  nodes: { x: number; y: number; type: NodeType }[];
+  viewport: { x: number; y: number; w: number; h: number };
+}
+
+export interface GraphViewHandle {
+  zoomIn: () => void;
+  zoomOut: () => void;
+  fitToScreen: () => void;
+  centerOn: (nodeId: string) => void;
+  panTo: (x: number, y: number) => void;
+  resetLayout: () => void;
+  toggleFullscreen: () => void;
+  getMinimapData: () => MinimapData | null;
+}
+
 interface Props {
   graph: GraphData;
+  messages: Message[];
   selectedId: string | null;
   highlightIds: Set<string> | null;
+  layoutMode: LayoutMode;
+  density: DensitySettings;
+  pinnedIds: Set<string>;
+  multiSelectIds: Set<string>;
   onSelect: (id: string | null) => void;
   onIsolate: (id: string) => void;
+  onToggleMultiSelect: (id: string) => void;
+  onPin: (id: string) => void;
+  onHide: (id: string) => void;
+  onExpandNeighbors: (id: string) => void;
+  children?: ReactNode;
 }
 
 const linkEnd = (v: string | RuntimeNode): string => (typeof v === "object" ? v.id : v);
@@ -41,12 +83,33 @@ const linkEnd = (v: string | RuntimeNode): string => (typeof v === "object" ? v.
 // search/keyboard focus) still render.
 const LOD_NODE_THRESHOLD = 1500;
 
-export default function GraphView({ graph, selectedId, highlightIds, onSelect, onIsolate }: Props) {
+const GraphView = forwardRef<GraphViewHandle, Props>(function GraphView(
+  {
+    graph,
+    messages,
+    selectedId,
+    highlightIds,
+    layoutMode,
+    density,
+    pinnedIds,
+    multiSelectIds,
+    onSelect,
+    onIsolate,
+    onToggleMultiSelect,
+    onPin,
+    onHide,
+    onExpandNeighbors,
+    children,
+  }: Props,
+  ref,
+) {
+  const shellRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<ForceGraph<RuntimeNode, RuntimeLink> | null>(null);
   const hoverRef = useRef<RuntimeNode | null>(null);
   const lastClickRef = useRef<{ id: string; time: number }>({ id: "", time: 0 });
   const focusRef = useRef<string | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
 
   // Interaction state lives in refs so canvas callbacks always see fresh values
   // without re-creating the graph instance.
@@ -56,6 +119,9 @@ export default function GraphView({ graph, selectedId, highlightIds, onSelect, o
     neighbors: new Set<string>(),
     neighborList: [] as string[],
     nodeCount: 0,
+    density: DEFAULT_DENSITY,
+    pinnedIds: new Set<string>(),
+    multiSelectIds: new Set<string>(),
   });
 
   const neighbors = useMemo(() => {
@@ -76,7 +142,26 @@ export default function GraphView({ graph, selectedId, highlightIds, onSelect, o
     [neighbors, selectedId],
   );
 
-  stateRef.current = { selectedId, highlightIds, neighbors, neighborList, nodeCount: graph.nodes.length };
+  stateRef.current = {
+    selectedId,
+    highlightIds,
+    neighbors,
+    neighborList,
+    nodeCount: graph.nodes.length,
+    density,
+    pinnedIds,
+    multiSelectIds,
+  };
+
+  const nodeRadius = (n: RuntimeNode) =>
+    (2 + Math.sqrt(n.degree + 1) * 1.6) * stateRef.current.density.nodeScale;
+
+  const requestRedraw = () => {
+    const fg = graphRef.current;
+    // Re-setting a paint prop flags needsRedraw — the render loop is paused
+    // after cooldown, so ref changes alone never reach the canvas.
+    if (fg) fg.nodeCanvasObject(fg.nodeCanvasObject());
+  };
 
   useEffect(() => {
     focusRef.current = null;
@@ -90,12 +175,6 @@ export default function GraphView({ graph, selectedId, highlightIds, onSelect, o
         el.tagName === "SELECT" ||
         el.tagName === "BUTTON" ||
         el.isContentEditable);
-    const requestRedraw = () => {
-      const fg = graphRef.current;
-      // Re-setting a paint prop flags needsRedraw — the render loop is paused
-      // after cooldown, so ref changes alone never reach the canvas.
-      if (fg) fg.nodeCanvasObject(fg.nodeCanvasObject());
-    };
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "ArrowLeft" && e.key !== "ArrowRight" && e.key !== "Enter") return;
       if (isTextTarget(document.activeElement)) return;
@@ -122,6 +201,20 @@ export default function GraphView({ graph, selectedId, highlightIds, onSelect, o
   }, [onSelect]);
 
   useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [menu]);
+
+  useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
@@ -130,23 +223,36 @@ export default function GraphView({ graph, selectedId, highlightIds, onSelect, o
       .nodeId("id")
       .nodeVal((n) => 2 + Math.sqrt(n.degree + 1) * 1.6)
       .nodeLabel((n) => `${n.fullLabel ?? n.label} (${n.type})`)
+      .linkVisibility(() => stateRef.current.density.showEdges)
       .linkColor((l) => {
-        const { selectedId: sel } = stateRef.current;
-        if (!sel) return LINK_COLOR;
+        const { selectedId: sel, density: d } = stateRef.current;
+        const base = (a: number) => `rgba(120, 132, 158, ${a * d.edgeOpacity})`;
+        if (!sel) return base(LINK_ALPHA);
         const s = linkEnd(l.source);
         const t = linkEnd(l.target);
-        return s === sel || t === sel ? HILITE_LINK : DIM_LINK;
+        return s === sel || t === sel
+          ? `rgba(96, 165, 250, ${HILITE_LINK_ALPHA * d.edgeOpacity})`
+          : base(DIM_LINK_ALPHA);
       })
-      .linkWidth((l) => Math.min(1 + Math.log2(l.weight), 4))
+      .linkWidth((l) =>
+        Math.min(1 + Math.log2(l.weight), 4) * stateRef.current.density.linkWidthScale,
+      )
       .nodeCanvasObject((node, ctx, globalScale) => {
-        const { selectedId: sel, highlightIds: hilite, neighbors: nbrs } = stateRef.current;
-        const r = 2 + Math.sqrt(node.degree + 1) * 1.6;
+        const {
+          selectedId: sel,
+          highlightIds: hilite,
+          neighbors: nbrs,
+          density: d,
+          pinnedIds: pins,
+          multiSelectIds: multi,
+        } = stateRef.current;
+        const r = nodeRadius(node);
         const x = node.x ?? 0;
         const y = node.y ?? 0;
 
         const dimmedBySelection = sel !== null && !nbrs.has(node.id);
         const dimmedBySearch = hilite !== null && !hilite.has(node.id);
-        const dimmed = dimmedBySelection || dimmedBySearch;
+        const dimmed = (dimmedBySelection || dimmedBySearch) && !multi.has(node.id);
         const color = dimmed ? DIM_NODE : NODE_COLORS[node.type];
 
         ctx.beginPath();
@@ -168,6 +274,21 @@ export default function GraphView({ graph, selectedId, highlightIds, onSelect, o
           ctx.stroke();
         }
 
+        if (multi.has(node.id)) {
+          ctx.beginPath();
+          ctx.arc(x, y, r + 2.5 / globalScale, 0, 2 * Math.PI);
+          ctx.lineWidth = 1.5 / globalScale;
+          ctx.strokeStyle = MULTI_COLOR;
+          ctx.stroke();
+        }
+
+        if (pins.has(node.id)) {
+          ctx.beginPath();
+          ctx.arc(x + r * 0.85, y - r * 0.85, Math.max(r * 0.3, 1.6 / globalScale), 0, 2 * Math.PI);
+          ctx.fillStyle = PIN_COLOR;
+          ctx.fill();
+        }
+
         const focused = focusRef.current === node.id && node.id !== sel;
         if (focused) {
           ctx.setLineDash([3 / globalScale, 2 / globalScale]);
@@ -180,12 +301,26 @@ export default function GraphView({ graph, selectedId, highlightIds, onSelect, o
         const hovered = hoverRef.current?.id === node.id;
         const searchHit = hilite !== null && hilite.has(node.id);
         const lod = stateRef.current.nodeCount > LOD_NODE_THRESHOLD;
-        // Ambient labels are hover/selection/search only — no auto-reveal by
-        // degree at moderate zoom, which clutters dense graphs. Zooming in
-        // far enough still reveals labels for everything in view.
-        const showLabel =
-          !dimmed &&
-          (hovered || node.id === sel || searchHit || focused || (!lod && globalScale > 2.2));
+        const explicit = hovered || node.id === sel || searchHit || focused || multi.has(node.id);
+        let showLabel: boolean;
+        switch (d.labelMode) {
+          case "always":
+            showLabel = !dimmed;
+            break;
+          case "hover":
+            showLabel = hovered;
+            break;
+          case "selected":
+            showLabel = node.id === sel || multi.has(node.id);
+            break;
+          default:
+            showLabel =
+              !dimmed &&
+              (explicit ||
+                (!lod &&
+                  (globalScale > d.labelZoom ||
+                    (globalScale > d.labelZoom * 0.55 && node.degree >= 8))));
+        }
         if (showLabel) {
           const fontSize = Math.max(11 / globalScale, 2.2);
           ctx.font = `${hovered || node.id === sel ? 600 : 400} ${fontSize}px Inter, sans-serif`;
@@ -196,7 +331,7 @@ export default function GraphView({ graph, selectedId, highlightIds, onSelect, o
         }
       })
       .nodePointerAreaPaint((node, color, ctx) => {
-        const r = 4 + Math.sqrt(node.degree + 1) * 1.6;
+        const r = nodeRadius(node) + 2;
         ctx.beginPath();
         ctx.arc(node.x ?? 0, node.y ?? 0, r, 0, 2 * Math.PI);
         ctx.fillStyle = color;
@@ -206,7 +341,11 @@ export default function GraphView({ graph, selectedId, highlightIds, onSelect, o
         hoverRef.current = node ?? null;
         el.style.cursor = node ? "pointer" : "default";
       })
-      .onNodeClick((node) => {
+      .onNodeClick((node, event) => {
+        if (event.shiftKey) {
+          onToggleMultiSelect(node.id);
+          return;
+        }
         const now = performance.now();
         const last = lastClickRef.current;
         lastClickRef.current = { id: node.id, time: now };
@@ -216,6 +355,18 @@ export default function GraphView({ graph, selectedId, highlightIds, onSelect, o
           onSelect(node.id);
         }
       })
+      .onNodeRightClick((node, event) => {
+        event.preventDefault();
+        const rect = el.getBoundingClientRect();
+        setMenu({ x: event.clientX - rect.left, y: event.clientY - rect.top, nodeId: node.id });
+      })
+      .onNodeDragEnd((node) => {
+        // force-graph releases fx/fy on drag end (verified in source) —
+        // re-fixing here makes drag an explicit pin action.
+        node.fx = node.x;
+        node.fy = node.y;
+        if (!stateRef.current.pinnedIds.has(node.id)) onPin(node.id);
+      })
       .onBackgroundClick(() => onSelect(null))
       .cooldownTicks(200);
 
@@ -223,6 +374,8 @@ export default function GraphView({ graph, selectedId, highlightIds, onSelect, o
     charge?.strength?.(-42);
 
     graphRef.current = fg;
+
+    el.addEventListener("contextmenu", (e) => e.preventDefault());
 
     const resize = () => fg.width(el.clientWidth).height(el.clientHeight);
     resize();
@@ -252,5 +405,173 @@ export default function GraphView({ graph, selectedId, highlightIds, onSelect, o
     fg.d3ReheatSimulation();
   }, [graph]);
 
-  return <div ref={containerRef} className="graph-wrap" onClick={(e) => e.stopPropagation()} />;
-}
+  useEffect(() => {
+    const fg = graphRef.current;
+    if (!fg) return;
+    // null deletes the force from the simulation (d3-force forces.delete) —
+    // overwriting alone would leave stale layout forces active across modes.
+    fg.d3Force("layout", null);
+    const force = buildLayoutForce(layoutMode, graph, messages);
+    if (force) fg.d3Force("layout", force as never);
+    fg.d3ReheatSimulation();
+  }, [layoutMode, graph, messages]);
+
+  useEffect(() => {
+    const fg = graphRef.current;
+    if (!fg) return;
+    const link = fg.d3Force("link") as { distance?: (v: number) => void } | undefined;
+    link?.distance?.(density.linkDistance);
+    fg.d3Force(
+      "collide",
+      density.collideStrength > 0
+        ? (makeCollideForce((n) => nodeRadius(n as RuntimeNode) + 1, density.collideStrength) as never)
+        : null,
+    );
+    fg.d3ReheatSimulation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [density.linkDistance, density.collideStrength]);
+
+  useEffect(() => {
+    requestRedraw();
+  }, [
+    density.nodeScale,
+    density.labelZoom,
+    density.labelMode,
+    density.edgeOpacity,
+    density.linkWidthScale,
+    density.showEdges,
+    multiSelectIds,
+    pinnedIds,
+  ]);
+
+  useEffect(() => {
+    const fg = graphRef.current;
+    if (!fg) return;
+    let changed = false;
+    for (const n of fg.graphData().nodes) {
+      const pinned = pinnedIds.has(n.id);
+      if (pinned && n.fx === undefined) {
+        n.fx = n.x;
+        n.fy = n.y;
+        changed = true;
+      } else if (!pinned && n.fx !== undefined) {
+        n.fx = undefined;
+        n.fy = undefined;
+        changed = true;
+      }
+    }
+    if (changed) fg.d3ReheatSimulation();
+  }, [pinnedIds, graph]);
+
+  useImperativeHandle(
+    ref,
+    (): GraphViewHandle => ({
+      zoomIn: () => {
+        const fg = graphRef.current;
+        if (fg) fg.zoom(fg.zoom() * 1.4, 300);
+      },
+      zoomOut: () => {
+        const fg = graphRef.current;
+        if (fg) fg.zoom(fg.zoom() / 1.4, 300);
+      },
+      fitToScreen: () => graphRef.current?.zoomToFit(400, 40),
+      centerOn: (nodeId: string) => {
+        const fg = graphRef.current;
+        if (!fg) return;
+        const node = fg.graphData().nodes.find((n) => n.id === nodeId);
+        if (node?.x === undefined || node.y === undefined) return;
+        fg.centerAt(node.x, node.y, 400);
+      },
+      panTo: (x: number, y: number) => graphRef.current?.centerAt(x, y, 200),
+      resetLayout: () => {
+        const fg = graphRef.current;
+        if (!fg) return;
+        const nodes = fg.graphData().nodes;
+        const spread = Math.sqrt(nodes.length + 1) * 12;
+        for (const n of nodes) {
+          n.fx = undefined;
+          n.fy = undefined;
+          n.x = (Math.random() - 0.5) * spread;
+          n.y = (Math.random() - 0.5) * spread;
+          n.vx = 0;
+          n.vy = 0;
+        }
+        fg.d3ReheatSimulation();
+      },
+      toggleFullscreen: () => {
+        const el = shellRef.current;
+        if (!el) return;
+        if (document.fullscreenElement) void document.exitFullscreen();
+        else void el.requestFullscreen();
+      },
+      getMinimapData: () => {
+        const fg = graphRef.current;
+        const el = containerRef.current;
+        if (!fg || !el) return null;
+        const tl = fg.screen2GraphCoords(0, 0);
+        const br = fg.screen2GraphCoords(el.clientWidth, el.clientHeight);
+        return {
+          nodes: fg
+            .graphData()
+            .nodes.filter((n) => n.x !== undefined)
+            .map((n) => ({ x: n.x!, y: n.y!, type: n.type })),
+          viewport: { x: tl.x, y: tl.y, w: br.x - tl.x, h: br.y - tl.y },
+        };
+      },
+    }),
+    [],
+  );
+
+  const menuNodePinned = menu ? pinnedIds.has(menu.nodeId) : false;
+
+  return (
+    // force-graph wipes its container's DOM on init (domNode.innerHTML = ''),
+    // so React children must live in a sibling-wrapping shell, never inside it.
+    <div ref={shellRef} className="graph-shell" onClick={(e) => e.stopPropagation()}>
+      <div ref={containerRef} className="graph-wrap" />
+      {children}
+      {menu && (
+        <div
+          className="context-menu"
+          style={{ left: menu.x, top: menu.y }}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => {
+              onIsolate(menu.nodeId);
+              setMenu(null);
+            }}
+          >
+            Isolate
+          </button>
+          <button
+            onClick={() => {
+              onPin(menu.nodeId);
+              setMenu(null);
+            }}
+          >
+            {menuNodePinned ? "Unpin" : "Pin"}
+          </button>
+          <button
+            onClick={() => {
+              onHide(menu.nodeId);
+              setMenu(null);
+            }}
+          >
+            Hide
+          </button>
+          <button
+            onClick={() => {
+              onExpandNeighbors(menu.nodeId);
+              setMenu(null);
+            }}
+          >
+            Expand neighbors
+          </button>
+        </div>
+      )}
+    </div>
+  );
+});
+
+export default GraphView;
