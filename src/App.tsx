@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Dataset, GraphData, GraphNode, LinkType, Message, NodeType } from "./lib/types";
+import type { Dataset, GraphData, GraphNode, LinkType, NodeType } from "./lib/types";
 import { APP_VERSION } from "./lib/dataset";
 import { getStoredTheme, toggleTheme } from "./lib/theme";
 import { parseOutlookCsv } from "./lib/parseOutlookCsv";
-import { parseFiles, type ParseProgress } from "./lib/ingest";
+import { parseFiles, type ParseProgress, type IngestItem } from "./lib/ingest";
 import { exportDatasetJson, importDatasetJson, mergeDataset } from "./lib/dataset";
 import { clearDataset, loadDataset, saveDataset } from "./lib/storage";
 import { runQuery } from "./lib/query";
+import { buildImportSummary, type ImportSummary } from "./lib/importSummary";
 import GraphView, { type GraphViewHandle } from "./components/GraphView";
 import GraphControls from "./components/GraphControls";
 import GraphLayoutControls from "./components/GraphLayoutControls";
@@ -25,6 +26,7 @@ import AskPanel from "./components/AskPanel";
 import CommandPalette, { type PaletteAction } from "./components/CommandPalette";
 import GraphSearch from "./components/GraphSearch";
 import GraphFilters, { nonLargestComponentIds } from "./components/GraphFilters";
+import ImportReviewPanel, { shouldSkipReview } from "./components/ImportReviewPanel";
 
 // Synthetic, fully fictional data (see public/demo-samples) — the real
 // sample exports in public/samples/ are gitignored and never shipped.
@@ -71,6 +73,9 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [hasSaved, setHasSaved] = useState(false);
   const [theme, setThemeState] = useState(getStoredTheme);
+  const [pendingItems, setPendingItems] = useState<IngestItem[] | null>(null);
+  const [pendingErrors, setPendingErrors] = useState<string[]>([]);
+  const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
   const graphApi = useRef<GraphViewHandle | null>(null);
 
   useEffect(() => setAdhocHighlight(null), [search]);
@@ -125,11 +130,9 @@ export default function App() {
     setPanel(null);
   }, []);
 
-  const ingestItems = useCallback(
-    (items: { name: string; messages: Message[] }[]) => {
+  const commitItems = useCallback(
+    (items: IngestItem[], errors: string[]) => {
       if (items.length === 0) return;
-      // Functional update: overlapping async uploads must merge into the
-      // latest dataset, not the one captured when parsing started.
       setDataset((prev) => {
         let next = prev;
         for (const item of items) next = mergeDataset(next, item.messages, item.name);
@@ -138,9 +141,51 @@ export default function App() {
       setSelectedId(null);
       setIsolatedId(null);
       setPanel(null);
+      if (errors.length) setError(errors.join(" · "));
     },
     [],
   );
+
+  const ingestItems = useCallback(
+    (items: IngestItem[], errors: string[] = []) => {
+      if (items.length === 0) {
+        if (errors.length) setError(errors.join(" · "));
+        return;
+      }
+      if (shouldSkipReview()) {
+        commitItems(items, errors);
+        return;
+      }
+      // Build a preview dataset to populate summary totals
+      setDataset((prev) => {
+        let next = prev;
+        for (const item of items) next = mergeDataset(next, item.messages, item.name);
+        const summary = buildImportSummary(items, next!, prev, errors);
+        // Schedule state updates outside the functional updater
+        setTimeout(() => {
+          setPendingItems(items);
+          setPendingErrors(errors);
+          setImportSummary(summary);
+        }, 0);
+        return prev; // don't commit yet
+      });
+    },
+    [commitItems],
+  );
+
+  const onConfirmImport = useCallback(() => {
+    if (!pendingItems) return;
+    commitItems(pendingItems, pendingErrors);
+    setPendingItems(null);
+    setPendingErrors([]);
+    setImportSummary(null);
+  }, [pendingItems, pendingErrors, commitItems]);
+
+  const onCancelImport = useCallback(() => {
+    setPendingItems(null);
+    setPendingErrors([]);
+    setImportSummary(null);
+  }, []);
 
   const onFiles = useCallback(
     async (files: File[]) => {
@@ -149,8 +194,7 @@ export default function App() {
       setParseProgress(null);
       try {
         const { items, errors } = await parseFiles(files, setParseProgress);
-        ingestItems(items);
-        if (errors.length) setError(errors.join(" · "));
+        ingestItems(items, errors);
       } finally {
         setLoading(false);
         setParseProgress(null);
@@ -763,6 +807,13 @@ export default function App() {
             actions={paletteActions}
             onSelectNode={onPickNode}
             onClose={() => setPaletteOpen(false)}
+          />
+        )}
+        {importSummary && (
+          <ImportReviewPanel
+            summary={importSummary}
+            onConfirm={onConfirmImport}
+            onCancel={onCancelImport}
           />
         )}
       </main>
