@@ -1,11 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Dataset, GraphData, GraphNode, Message, NodeType } from "./lib/types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Dataset, GraphData, GraphNode, LinkType, Message, NodeType } from "./lib/types";
 import { parseOutlookCsv } from "./lib/parseOutlookCsv";
 import { parseFiles, type ParseProgress } from "./lib/ingest";
 import { exportDatasetJson, importDatasetJson, mergeDataset } from "./lib/dataset";
 import { clearDataset, loadDataset, saveDataset } from "./lib/storage";
 import { runQuery } from "./lib/query";
-import GraphView from "./components/GraphView";
+import GraphView, { type GraphViewHandle } from "./components/GraphView";
+import GraphControls from "./components/GraphControls";
+import GraphLayoutControls from "./components/GraphLayoutControls";
+import GraphDensityControls, {
+  DEFAULT_DENSITY,
+  type DensitySettings,
+} from "./components/GraphDensityControls";
+import { datasetHasDates, type LayoutMode } from "./lib/graphForces";
 import Sidebar, { ALL_TYPES, type ViewState } from "./components/Sidebar";
 import type { SavedView } from "./lib/savedViews";
 import DetailPanel from "./components/DetailPanel";
@@ -39,6 +46,16 @@ export default function App() {
   const [isolatedId, setIsolatedId] = useState<string | null>(null);
   const [panel, setPanel] = useState<Panel>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>("force");
+  const [densitySettings, setDensitySettings] = useState<DensitySettings>(DEFAULT_DENSITY);
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
+  const [multiSelectIds, setMultiSelectIds] = useState<Set<string>>(new Set());
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [enabledLinkTypes, setEnabledLinkTypes] = useState<Set<Exclude<LinkType, "cooccurs">>>(
+    new Set(["participated", "mentions", "references"]),
+  );
+  const graphApi = useRef<GraphViewHandle | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,6 +83,8 @@ export default function App() {
         setPanel(null);
         setSelectedId(null);
         setIsolatedId(null);
+        setMultiSelectIds(new Set());
+        setExpandedIds(new Set());
       }
     };
     window.addEventListener("keydown", onKey);
@@ -172,10 +191,19 @@ export default function App() {
     if (!dataset) return null;
     let nodes = dataset.graph.nodes.filter((n) => enabledTypes.has(n.type));
     if (hideNonMatching && matchIds !== null) nodes = nodes.filter((n) => matchIds.has(n.id));
+    if (expandedIds.size > 0) {
+      const present = new Set(nodes.map((n) => n.id));
+      for (const n of dataset.graph.nodes) {
+        if (expandedIds.has(n.id) && !present.has(n.id)) nodes.push(n);
+      }
+    }
+    if (hiddenIds.size > 0) nodes = nodes.filter((n) => !hiddenIds.has(n.id));
     let nodeIds = new Set(nodes.map((n) => n.id));
     let links = dataset.graph.links.filter(
       (l) =>
         (l.type !== "cooccurs" || showPersonLinks) &&
+        (l.type === "cooccurs" || enabledLinkTypes.has(l.type)) &&
+        l.weight >= densitySettings.minLinkWeight &&
         nodeIds.has(linkEndId(l.source)) &&
         nodeIds.has(linkEndId(l.target)),
     );
@@ -192,7 +220,18 @@ export default function App() {
       links = links.filter((l) => nodeIds.has(linkEndId(l.source)) && nodeIds.has(linkEndId(l.target)));
     }
     return { nodes, links };
-  }, [dataset, enabledTypes, showPersonLinks, isolatedId, hideNonMatching, matchIds]);
+  }, [
+    dataset,
+    enabledTypes,
+    showPersonLinks,
+    isolatedId,
+    hideNonMatching,
+    matchIds,
+    expandedIds,
+    hiddenIds,
+    enabledLinkTypes,
+    densitySettings.minLinkWeight,
+  ]);
 
   // When hiding non-matches the graph is already filtered — no need to dim.
   const highlightIds = hideNonMatching ? null : matchIds;
@@ -237,6 +276,80 @@ export default function App() {
   const onApplyQuery = useCallback((q: string) => {
     setSearch(q);
   }, []);
+
+  const onToggleMultiSelect = useCallback((id: string) => {
+    setMultiSelectIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const onPin = useCallback((id: string) => {
+    setPinnedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const onHide = useCallback((id: string) => {
+    setHiddenIds((prev) => new Set(prev).add(id));
+    setSelectedId((sel) => (sel === id ? null : sel));
+  }, []);
+
+  const onExpandNeighbors = useCallback(
+    (id: string) => {
+      if (!dataset) return;
+      setExpandedIds((prev) => {
+        const next = new Set(prev);
+        for (const l of dataset.graph.links) {
+          const s = linkEndId(l.source);
+          const t = linkEndId(l.target);
+          if (s === id) next.add(t);
+          if (t === id) next.add(s);
+        }
+        return next;
+      });
+      setHiddenIds((prev) => {
+        if (prev.size === 0) return prev;
+        const next = new Set(prev);
+        for (const l of dataset.graph.links) {
+          const s = linkEndId(l.source);
+          const t = linkEndId(l.target);
+          if (s === id) next.delete(t);
+          if (t === id) next.delete(s);
+        }
+        return next;
+      });
+    },
+    [dataset],
+  );
+
+  const onToggleLinkType = useCallback((t: Exclude<LinkType, "cooccurs">) => {
+    setEnabledLinkTypes((prev) => {
+      const next = new Set(prev);
+      if (next.has(t)) next.delete(t);
+      else next.add(t);
+      return next;
+    });
+  }, []);
+
+  const onResetLayout = useCallback(() => {
+    setPinnedIds(new Set());
+    graphApi.current?.resetLayout();
+  }, []);
+
+  const hasDates = useMemo(() => (dataset ? datasetHasDates(dataset.messages) : false), [dataset]);
+
+  const maxLinkWeight = useMemo(() => {
+    if (!dataset) return 1;
+    let max = 1;
+    for (const l of dataset.graph.links) if (l.weight > max) max = l.weight;
+    return max;
+  }, [dataset]);
 
   const currentViewState = useMemo<ViewState>(
     () => ({ search, enabledTypes: [...enabledTypes], showPersonLinks, hideNonMatching }),
@@ -296,12 +409,34 @@ export default function App() {
         ) : (
           <DropOverlay onFiles={onFiles}>
             <GraphView
+              ref={graphApi}
               graph={visibleGraph}
+              messages={dataset.messages}
               selectedId={selectedId}
               highlightIds={highlightIds}
+              layoutMode={layoutMode}
+              density={densitySettings}
+              pinnedIds={pinnedIds}
+              multiSelectIds={multiSelectIds}
               onSelect={onSelect}
               onIsolate={onIsolate}
-            />
+              onToggleMultiSelect={onToggleMultiSelect}
+              onPin={onPin}
+              onHide={onHide}
+              onExpandNeighbors={onExpandNeighbors}
+            >
+              <GraphControls api={graphApi} selectedId={selectedId} onResetLayout={onResetLayout} />
+              <div className="graph-side">
+                <GraphLayoutControls mode={layoutMode} onChange={setLayoutMode} hasDates={hasDates} />
+                <GraphDensityControls
+                  settings={densitySettings}
+                  onChange={setDensitySettings}
+                  enabledLinkTypes={enabledLinkTypes}
+                  onToggleLinkType={onToggleLinkType}
+                  maxLinkWeight={maxLinkWeight}
+                />
+              </div>
+            </GraphView>
             {isolatedId && <div className="graph-hint">Isolated neighborhood — click background or double-click again to reset</div>}
             <StatsBar dataset={dataset} visibleNodes={visibleGraph.nodes.length} visibleLinks={visibleGraph.links.length} />
 
